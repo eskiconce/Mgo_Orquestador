@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TSMonitor - Dashboard Orquestador</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <style>
+        :root { --sidebar-width: 250px; --primary-color: #2c3e50; }
+        body { background-color: #f8f9fa; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
+        .sidebar { width: var(--sidebar-width); height: 100vh; position: fixed; background: var(--primary-color); color: white; padding-top: 20px; }
+        .content { margin-left: var(--sidebar-width); padding: 20px; }
+        .card { border: none; border-radius: 12px; box-shadow: 0 4px 12px rgba(0,0,0,0.05); transition: transform 0.2s; }
+        .card:hover { transform: translateY(-5px); }
+        .status-online { color: #2ecc71; }
+        .status-offline { color: #e74c3c; }
+        
+        /* Animación para señales caídas */
+        .shadow-pulse {
+            box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7);
+            animation: pulse-red 1.5s infinite;
+        }
+        @keyframes pulse-red {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(220, 53, 69, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
+        }
+
+        .signal-item { transition: background 0.3s; border-radius: 8px; margin-bottom: 5px; }
+        .signal-item:hover { background: rgba(0,0,0,0.03); }
+        .badge-visual { font-size: 0.65rem; padding: 4px 8px; }
+    </style>
+</head>
+<body>
+
+<div class="sidebar">
+    <div class="text-center mb-4">
+        <h4><i class="fas fa-broadcast-tower me-2"></i>Orquestador</h4>
+    </div>
+    <nav class="nav flex-column px-3">
+        <a class="nav-link text-white active mb-2 rounded bg-primary" href="/"><i class="fas fa-chart-line me-2"></i> Dashboard</a>
+        <a class="nav-link text-white mb-2 rounded" href="/ui/nodes"><i class="fas fa-server me-2"></i> Nodos</a>
+        <a class="nav-link text-white mb-2 rounded" href="/ui/channels"><i class="fas fa-tv me-2"></i> Canales</a>
+    </nav>
+</div>
+
+<div class="content">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h2>Panel de Control en Vivo</h2>
+        <span class="badge bg-dark px-3 py-2" id="last-update">Última actualización: --:--:--</span>
+    </div>
+
+    <div class="row g-4 mb-4">
+        <div class="col-md-3">
+            <div class="card p-3 bg-white border-start border-primary border-4">
+                <div class="d-flex justify-content-between align-items-center">
+                    <div>
+                        <h6 class="text-muted small">NODOS ACTIVOS</h6>
+                        <h3 class="mb-0">{{ nodes|selectattr("status", "equalto", "online")|list|length }}/{{ nodes|length }}</h3>
+                    </div>
+                    <i class="fas fa-server fa-2x text-primary opacity-25"></i>
+                </div>
+            </div>
+        </div>
+        </div>
+
+    <div class="row g-4">
+        {% for node in nodes %}
+        <div class="col-md-6 col-lg-4">
+            <div class="card h-100">
+                <div class="card-header bg-white border-0 d-flex justify-content-between align-items-center pt-3">
+                    <h5 class="mb-0"><i class="fas fa-hdd me-2"></i>{{ node.hostname }}</h5>
+                    <span class="badge {{ 'bg-success' if node.status == 'online' else 'bg-danger' }} rounded-pill">
+                        {{ node.status|upper }}
+                    </span>
+                </div>
+                <div class="card-body">
+                    <p class="text-muted small mb-3"><i class="fas fa-network-wired me-1"></i> {{ node.ip_address }} | {{ node.tipo }}</p>
+                    
+                    <div class="mb-2">
+                        <div class="d-flex justify-content-between small mb-1">
+                            <span>CPU</span> <span id="cpu_text_{{ node.id }}">0%</span>
+                        </div>
+                        <div class="progress" style="height: 6px;">
+                            <div id="cpu_bar_{{ node.id }}" class="progress-bar" role="progressbar" style="width: 0%"></div>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <div class="d-flex justify-content-between small mb-1">
+                            <span>RAM</span> <span id="ram_text_{{ node.id }}">0%</span>
+                        </div>
+                        <div class="progress" style="height: 6px;">
+                            <div id="ram_bar_{{ node.id }}" class="progress-bar bg-info" role="progressbar" style="width: 0%"></div>
+                        </div>
+                    </div>
+
+                    {% if node.tipo == 'Encoder' %}
+                    <div class="mt-4 border-top pt-3">
+                        <h6 class="fw-bold mb-3" style="font-size: 0.8rem; color: var(--primary-color);">
+                            <i class="fas fa-satellite-dish me-1"></i> MONITOREO DE ENTRADAS
+                        </h6>
+                        <div class="signal-container" id="signal_list_{{ node.id }}">
+                            {% for job in node.jobs if job.status == 'running' %}
+                            <div class="signal-item d-flex justify-content-between align-items-center p-2 mb-1 border rounded-2">
+                                <div class="d-flex align-items-center">
+                                    <div id="led_{{ job.id }}" 
+                                         class="rounded-circle me-2 {{ 'bg-success' if job.source_status == 'up' else 'bg-danger shadow-pulse' }}" 
+                                         style="width: 10px; height: 10px;"></div>
+                                    <span class="small fw-bold text-truncate" style="max-width: 120px;">{{ job.channel.channel_name }}</span>
+                                </div>
+                                <div class="d-flex align-items-center gap-2">
+                                    <span id="vbadge_{{ job.id }}" class="badge badge-visual rounded-pill border {{ 'text-success border-success' if job.source_status == 'up' else 'text-danger border-danger' }}">
+                                        {{ 'VIDEO OK' if job.source_status == 'up' else 'DOWN' }}
+                                    </span>
+                                    <button class="btn btn-sm btn-light p-1" onclick="showSnapshot('{{ job.id }}', '{{ job.channel.channel_name }}')" title="Ver captura">
+                                        <i class="fas fa-camera" style="font-size: 0.75rem;"></i>
+                                    </button>
+                                </div>
+                            </div>
+                            {% endfor %}
+                        </div>
+                    </div>
+                    {% endif %}
+                </div>
+                <div class="card-footer bg-light border-0 py-2 small d-flex justify-content-between">
+                    <span>Uptime: {{ node.uptime or '--' }}</span>
+                    <a href="/ui/nodes/{{ node.id }}" class="text-decoration-none">Detalles <i class="fas fa-chevron-right ms-1"></i></a>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+</div>
+
+<script>
+    async function refreshData() {
+        try {
+            const response = await fetch('/api/nodes/stats');
+            const data = await response.json();
+            
+            data.nodes.forEach(node => {
+                // Actualizar Barras CPU/RAM
+                const cpuBar = document.getElementById(`cpu_bar_${node.id}`);
+                const cpuText = document.getElementById(`cpu_text_${node.id}`);
+                if (cpuBar) {
+                    cpuBar.style.width = `${node.cpu}%`;
+                    cpuText.innerText = `${node.cpu}%`;
+                    cpuBar.className = node.cpu > 85 ? 'progress-bar bg-danger' : 'progress-bar';
+                }
+
+                const ramBar = document.getElementById(`ram_bar_${node.id}`);
+                const ramText = document.getElementById(`ram_text_${node.id}`);
+                if (ramBar) {
+                    ramBar.style.width = `${node.ram}%`;
+                    ramText.innerText = `${node.ram}%`;
+                }
+
+                // Actualizar Señales
+                if (node.jobs) {
+                    node.jobs.forEach(job => {
+                        const led = document.getElementById(`led_${job.id}`);
+                        const badge = document.getElementById(`vbadge_${job.id}`);
+                        
+                        if (led) {
+                            led.className = job.source_status === 'up' 
+                                ? 'bg-success rounded-circle me-2' 
+                                : 'bg-danger shadow-pulse rounded-circle me-2';
+                        }
+                        
+                        if (badge) {
+                            if (job.source_status !== 'up') {
+                                badge.innerText = "NO SIGNAL";
+                                badge.className = "badge badge-visual rounded-pill bg-dark text-white";
+                            } else {
+                                // Lógica visual simplificada: si el monitor detectó falla, cambia el badge
+                                // Esto depende de si pasas el estado is_freeze/is_black desde el monitor a la API
+                                badge.innerText = "VIDEO OK";
+                                badge.className = "badge badge-visual rounded-pill text-success border border-success bg-white";
+                            }
+                        }
+                    });
+                }
+            });
+
+            document.getElementById('last-update').innerText = `Última actualización: ${new Date().toLocaleTimeString()}`;
+        } catch (error) {
+            console.error('Error refrescando dashboard:', error);
+        }
+    }
+
+    function showSnapshot(jobId, channelName) {
+        const imageUrl = `/snapshots/job_${jobId}.jpg?t=${new Date().getTime()}`;
+        Swal.fire({
+            title: channelName,
+            text: 'Última captura del monitor visual',
+            imageUrl: imageUrl,
+            imageWidth: 400,
+            imageAlt: 'Captura de señal',
+            confirmButtonText: 'Cerrar',
+            confirmButtonColor: '#2c3e50',
+            backdrop: `rgba(44, 62, 80, 0.4)`
+        });
+    }
+
+    // Intervalo de refresco de 10 segundos para coincidir con el monitor
+    setInterval(refreshData, 10000);
+    window.onload = refreshData;
+</script>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

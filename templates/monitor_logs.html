@@ -1,0 +1,97 @@
+{% extends "base.html" %} 
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3 class="fw-bold"><i class="fas fa-heartbeat text-danger me-2"></i>Auditoría del Monitor</h3>
+        <p class="text-muted mb-0 small">Registro de eventos de auto-sanación, failover y salud de nodos de la granja</p>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 mb-4" style="border-radius: 12px;">
+    <div class="card-body bg-light rounded">
+        <form method="GET" action="/ui/monitor-logs" class="row g-3 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label small fw-bold text-muted">Tipo de Evento</label>
+                <select name="event_type" class="form-select font-monospace">
+                    <option value="">TODOS</option>
+                    <option value="NODE_DOWN" {% if filters.event_type == 'NODE_DOWN' %}selected{% endif %}>NODE_DOWN</option>
+                    <option value="NODE_UP" {% if filters.event_type == 'NODE_UP' %}selected{% endif %}>NODE_UP</option>
+                    <option value="FAILOVER_ACTIVATED" {% if filters.event_type == 'FAILOVER_ACTIVATED' %}selected{% endif %}>FAILOVER_ACTIVATED</option>
+                    <option value="FAILOVER_RESTORED" {% if filters.event_type == 'FAILOVER_RESTORED' %}selected{% endif %}>FAILOVER_RESTORED</option>
+                    <option value="PROCESS_CRASHED" {% if filters.event_type == 'PROCESS_CRASHED' %}selected{% endif %}>PROCESS_CRASHED</option>
+                    <option value="AUTO_KILL" {% if filters.event_type == 'AUTO_KILL' %}selected{% endif %}>AUTO_KILL</option>
+                    <option value="AUTO_START" {% if filters.event_type == 'AUTO_START' %}selected{% endif %}>AUTO_START</option>
+                    <option value="AUTO_RESYNC" {% if filters.event_type == 'AUTO_RESYNC' %}selected{% endif %}>AUTO_RESYNC</option>
+                    <option value="ZOMBIE_DETECTED" {% if filters.event_type == 'ZOMBIE_DETECTED' %}selected{% endif %}>ZOMBIE_DETECTED</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small fw-bold text-muted">Buscar en el Mensaje</label>
+                <input type="text" name="search" class="form-control" placeholder="Ej: Origin_2, inestable..." value="{{ filters.search }}">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small fw-bold text-muted">Fecha</label>
+                <input type="date" name="fecha" class="form-control text-secondary" value="{{ filters.fecha }}">
+            </div>
+            <div class="col-md-2 d-flex gap-2">
+                <button type="submit" class="btn btn-danger fw-bold w-100"><i class="fas fa-search me-2"></i>Filtrar</button>
+                <a href="/ui/monitor-logs" class="btn btn-outline-secondary" title="Limpiar Filtros"><i class="fas fa-times"></i></a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0" style="border-radius: 12px; overflow: hidden;">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0 font-monospace" style="font-size: 0.85rem;">
+            <thead class="table-dark text-white"> 
+                <tr>
+                    <th class="ps-4" style="width: 180px;">Timestamp</th>
+                    <th style="width: 220px;">Tipo de Evento</th>
+                    <th style="width: 150px;">Hardware</th>
+                    <th>Descripción del Evento</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                <tr>
+                    <td class="ps-4 text-muted fw-bold">{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                    <td>
+                        {% if log.event_type == 'NODE_UP' %}
+                            <span class="badge bg-success w-100 py-1"><i class="fas fa-arrow-up me-1"></i>NODE_UP</span>
+                        {% elif log.event_type in ['NODE_DOWN', 'PROCESS_CRASHED', 'AUTO_KILL', 'PROCESS_START_FAIL'] %}
+                            <span class="badge bg-danger w-100 py-1 shadow-sm"><i class="fas fa-exclamation-triangle me-1"></i>{{ log.event_type }}</span>
+                        {% elif log.event_type in ['FAILOVER_ACTIVATED', 'ZOMBIE_DETECTED'] %}
+                            <span class="badge bg-warning text-dark w-100 py-1 shadow-sm"><i class="fas fa-shield-alt me-1"></i>{{ log.event_type }}</span>
+                        {% elif log.event_type in ['AUTO_START', 'AUTO_RESYNC', 'FAILOVER_RESTORED'] %}
+                            <span class="badge bg-info text-dark w-100 py-1 shadow-sm"><i class="fas fa-magic me-1"></i>{{ log.event_type }}</span>
+                        {% else %}
+                            <span class="badge bg-secondary w-100 py-1">{{ log.event_type }}</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if log.node %}
+                            <span class="text-dark fw-bold"><i class="fas fa-server text-secondary me-1"></i>{{ log.node.hostname }}</span>
+                        {% else %}
+                            <span class="text-muted fst-italic">Global</span>
+                        {% endif %}
+                    </td>
+                    <td class="{% if log.event_type in ['NODE_DOWN', 'PROCESS_CRASHED', 'AUTO_KILL'] %}text-danger fw-bold{% elif log.event_type in ['FAILOVER_ACTIVATED'] %}text-dark fw-bold{% else %}text-secondary{% endif %}">
+                        {{ log.message }}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="4" class="text-center py-5 text-muted">
+                        <i class="fas fa-check-circle fa-3x mb-3 text-success opacity-50"></i>
+                        <h5>Sin eventos en el Monitor</h5>
+                        <p class="small">El monitor no ha registrado incidentes ni acciones de auto-sanación con estos filtros.</p>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div> 
+{% endblock %}

@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4 bg-white p-3 rounded shadow-sm border">
+    <div>
+        <h3 class="fw-bold mb-1"><i class="fas fa-terminal text-secondary me-2"></i>>_ Logs: <span class="text-primary">{{ job.channel.channel_name }}</span></h3>
+        <div class="d-flex gap-2 align-items-center mt-2">
+            <span class="badge bg-secondary"><i class="fas fa-server me-1"></i>{{ job.node.hostname }}</span>
+            <span class="badge bg-info text-dark">{{ job.node.tipo }}</span>
+            <span class="text-muted small font-monospace">{{ program_name }}</span>
+        </div>
+    </div>
+    
+    <div class="d-flex gap-2">
+        <a href="/ui/processes" class="btn btn-secondary shadow-sm"><i class="fas fa-arrow-left me-2"></i>Volver a Procesos</a>
+        
+        <div class="dropdown">
+            <button class="btn btn-primary shadow-sm dropdown-toggle fw-bold" type="button" id="refreshBtn" data-bs-toggle="dropdown" aria-expanded="false">
+                <i class="fas fa-sync-alt me-1" id="refreshIcon"></i> 
+                <span id="refreshLabel">Auto 5s</span>
+            </button>
+            <ul class="dropdown-menu shadow border-0 dropdown-menu-end" aria-labelledby="refreshBtn">
+                <li><h6 class="dropdown-header">Intervalo de actualización</h6></li>
+                <li><a class="dropdown-item" href="#" onclick="setRefresh(2); return false;">2 segundos (Rápido)</a></li>
+                <li><a class="dropdown-item" href="#" onclick="setRefresh(5); return false;">5 segundos (Default)</a></li>
+                <li><a class="dropdown-item" href="#" onclick="setRefresh(10); return false;">10 segundos</a></li>
+                <li><hr class="dropdown-divider"></li>
+                <li><a class="dropdown-item text-danger fw-bold" href="#" onclick="setRefresh(0); return false;"><i class="fas fa-pause me-2"></i>Pausar lectura</a></li>
+            </ul>
+        </div>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0 bg-dark">
+    <div class="card-header bg-dark border-bottom border-secondary text-white py-2">
+        <h6 class="mb-0 fw-bold"><i class="fas fa-exclamation-circle text-danger me-2"></i>STDERR / Log Principal</h6>
+    </div>
+    <div class="card-body p-0">
+        <pre id="log-err-content" class="p-3 mb-0 text-warning" style="background-color: #000000; height: 65vh; overflow-y: auto; font-family: monospace; font-size: 0.9rem; white-space: pre-wrap;">{{ logs_err.content }}</pre>
+    </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    const jobId = {{ job.id }};
+    let refreshInterval = 5000; // 5 segundos por defecto
+    let refreshTimer = null;
+    let isPaused = false;
+
+    // Función que consulta el nuevo endpoint de main.py sin recargar la página
+    async function fetchLogs(type, elementId) {
+        if (isPaused) return; 
+        
+        try {
+            const response = await fetch(`/api/processes/logs/${jobId}?type=${type}&lines=100`);
+            if (response.ok) {
+                const data = await response.json();
+                const el = document.getElementById(elementId);
+                if (el) {
+                    // UX Mágica: Verificamos si el usuario tiene el scroll al final
+                    const isScrolledToBottom = el.scrollHeight - el.clientHeight <= el.scrollTop + 50;
+                    
+                    el.textContent = data.content;
+                    
+                    // Si estaba mirando el final, auto-bajamos el scroll (estilo tail -f)
+                    if (isScrolledToBottom) {
+                        el.scrollTop = el.scrollHeight;
+                    }
+                }
+            }
+        } catch (e) {
+            console.error("Error contactando al orquestador:", e);
+        }
+    }
+
+    // Función expuesta globalmente para el botón dropdown
+    window.setRefresh = function(seconds) {
+        if (refreshTimer) clearInterval(refreshTimer);
+        
+        if (seconds === 0) {
+            isPaused = true;
+            document.getElementById('refreshLabel').innerText = "Pausado";
+            document.getElementById('refreshIcon').className = "fas fa-pause me-1";
+            document.getElementById('refreshBtn').classList.replace('btn-primary', 'btn-danger');
+        } else {
+            isPaused = false;
+            refreshInterval = seconds * 1000;
+            document.getElementById('refreshLabel').innerText = `Auto ${seconds}s`;
+            document.getElementById('refreshIcon').className = "fas fa-sync-alt fa-spin me-1"; // Gira mientras lee
+            document.getElementById('refreshBtn').classList.remove('btn-danger');
+            document.getElementById('refreshBtn').classList.add('btn-primary');
+            
+            // Iniciar el loop
+            refreshTimer = setInterval(() => {
+                fetchLogs('err', 'log-err-content');
+            }, refreshInterval);
+            
+            // Refrescar inmediatamente al hacer clic
+            fetchLogs('err', 'log-err-content');
+        }
+    };
+
+    // Iniciar automáticamente a los 5 segundos al entrar a la vista
+    setRefresh(5);
+});
+</script>
+{% endblock %}

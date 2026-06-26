@@ -1,0 +1,305 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h3><i class="fas fa-server text-success me-2"></i>Infraestructura (Nodos)</h3>
+    <a href="/ui/nodes/new" class="btn btn-success"><i class="fas fa-plus-circle me-2"></i>Nuevo Nodo</a>
+</div>
+
+<div class="d-flex align-items-center mb-2">
+    <h5 class="text-primary fw-bold mb-0"><i class="fas fa-video me-2"></i>Encoders</h5>
+</div>
+<div class="card shadow-sm mb-5">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th style="width: 25%;">Nombre / IP</th>
+                    <th>Estado</th>
+                    <th style="width: 15%;">CPU / RAM</th>
+                    <th>Carga (1m)</th> <th>Red (TX/RX)</th>
+                    <th class="text-end">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for node in nodes %}
+                {% if node.tipo == 'Encoder' %}
+                <tr>
+                    <td>
+                        <div class="d-flex flex-column">
+                            <span class="fw-bold text-primary mb-1">{{ node.hostname }}</span>
+                            <small class="text-muted mb-2">
+                                <i class="fas fa-ethernet me-1"></i> {{ node.ip_address }}
+                            </small>
+                            <div>
+                                {% if node.job_count > 0 %}
+                                    <span class="badge bg-primary bg-opacity-10 text-primary border border-primary">
+                                        <i class="fas fa-layer-group me-1"></i> {{ node.job_count }} Canales
+                                    </span>
+                                {% else %}
+                                    <span class="badge bg-light text-secondary border">
+                                        <i class="fas fa-check me-1"></i> Libre
+                                    </span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </td>
+                    
+                    <td>
+                        <span id="status_badge_{{ node.id }}" class="badge bg-secondary">Wait...</span>
+                    </td>
+
+                    <td>
+                        <div class="d-flex justify-content-between mb-1">
+                             <small class="text-muted" style="font-size: 0.7em;">CPU</small>
+                             <small id="cpu_text_{{ node.id }}" style="font-size: 0.7em;">-</small>
+                        </div>
+                        <div class="progress mb-1" style="height: 4px;">
+                            <div id="cpu_bar_{{ node.id }}" class="progress-bar bg-info" style="width: 0%"></div>
+                        </div>
+                        
+                        <div class="d-flex justify-content-between mb-1">
+                             <small class="text-purple fw-bold" style="font-size: 0.7em; color: #6f42c1;">P-Cores</small>
+                             <small id="p_cpu_text_{{ node.id }}" style="font-size: 0.7em;">-</small>
+                        </div>
+                        <div class="progress mb-1" style="height: 4px;">
+                            <div id="p_cpu_bar_{{ node.id }}" class="progress-bar" style="width: 0%; background-color: #6f42c1;"></div>
+                        </div>
+
+                        <div class="d-flex justify-content-between mb-1">
+                             <small class="text-muted" style="font-size: 0.7em;">RAM</small>
+                             <small id="ram_text_{{ node.id }}" style="font-size: 0.7em;">-</small>
+                        </div>
+                        <div class="progress" style="height: 4px;">
+                            <div id="ram_bar_{{ node.id }}" class="progress-bar bg-warning" style="width: 0%"></div>
+                        </div>
+                    </td>
+
+                    <td>
+                        <span id="load_text_{{ node.id }}" class="fw-bold text-dark">-</span>
+                    </td>
+
+                    <td style="font-size: 0.8em;">
+                        <div class="text-success"><i class="fas fa-arrow-up me-1"></i><span id="net_tx_{{ node.id }}">-</span></div>
+                        <div class="text-primary"><i class="fas fa-arrow-down me-1"></i><span id="net_rx_{{ node.id }}">-</span></div>
+                    </td>
+
+                    <td class="text-end">
+                        <a href="/ui/nodes/edit/{{ node.id }}" class="btn btn-sm btn-outline-primary" title="Editar"><i class="fas fa-edit"></i></a>
+                        {% if node.job_count == 0 %}
+                        <a href="/ui/nodes/delete/{{ node.id }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('¿Eliminar?')" title="Eliminar"><i class="fas fa-trash"></i></a>
+                        {% else %}
+                        <button class="btn btn-sm btn-outline-secondary" disabled><i class="fas fa-trash"></i></button>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endif %}
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="d-flex align-items-center mb-2">
+    <h5 class="text-warning text-dark fw-bold mb-0"><i class="fas fa-box-open me-2"></i>Packagers</h5>
+</div>
+<div class="card shadow-sm">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th style="width: 25%;">Nombre / IP</th>
+                    <th>Estado</th>
+                    <th style="width: 15%;">CPU / RAM</th>
+                    <th>Carga (1m)</th> <th>Red (TX/RX)</th> <th class="text-end">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for node in nodes %}
+                {% if node.tipo == 'Packager' %}
+                <tr>
+                    <td>
+                        <div class="d-flex flex-column">
+                            <span class="fw-bold text-dark mb-1">{{ node.hostname }}</span>
+                            <small class="text-muted mb-2">
+                                <i class="fas fa-ethernet me-1"></i> {{ node.ip_address }}
+                            </small>
+                            <div>
+                                {% if node.job_count > 0 %}
+                                    <span class="badge bg-warning bg-opacity-25 text-dark border border-warning">
+                                        <i class="fas fa-layer-group me-1"></i> {{ node.job_count }} Canales
+                                    </span>
+                                {% else %}
+                                    <span class="badge bg-light text-secondary border">
+                                        <i class="fas fa-check me-1"></i> Libre
+                                    </span>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </td>
+                    
+                    <td>
+                        <span id="status_badge_{{ node.id }}" class="badge bg-secondary">Wait...</span>
+                    </td>
+
+                    <td>
+                        <div class="d-flex justify-content-between mb-1">
+                             <small class="text-muted" style="font-size: 0.7em;">CPU</small>
+                             <small id="cpu_text_{{ node.id }}" style="font-size: 0.7em;">-</small>
+                        </div>
+                        <div class="progress mb-1" style="height: 4px;">
+                            <div id="cpu_bar_{{ node.id }}" class="progress-bar bg-info" style="width: 0%"></div>
+                        </div>
+                        
+                        <div class="d-flex justify-content-between mb-1">
+                             <small class="text-muted" style="font-size: 0.7em;">RAM</small>
+                             <small id="ram_text_{{ node.id }}" style="font-size: 0.7em;">-</small>
+                        </div>
+                        <div class="progress" style="height: 4px;">
+                            <div id="ram_bar_{{ node.id }}" class="progress-bar bg-warning" style="width: 0%"></div>
+                        </div>
+                    </td>
+
+                    <td>
+                        <span id="load_text_{{ node.id }}" class="fw-bold text-dark">-</span>
+                    </td>
+
+                    <td style="font-size: 0.8em;">
+                        <div class="text-success"><i class="fas fa-arrow-up me-1"></i><span id="net_tx_{{ node.id }}">-</span></div>
+                        <div class="text-primary"><i class="fas fa-arrow-down me-1"></i><span id="net_rx_{{ node.id }}">-</span></div>
+                    </td>
+
+                    <td class="text-end">
+                        <a href="/ui/nodes/edit/{{ node.id }}" class="btn btn-sm btn-outline-primary" title="Editar"><i class="fas fa-edit"></i></a>
+                        
+                        {% if node.job_count == 0 %}
+                        <a href="/ui/nodes/delete/{{ node.id }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('¿Eliminar?')" title="Eliminar"><i class="fas fa-trash"></i></a>
+                        {% else %}
+                        <button class="btn btn-sm btn-outline-secondary" disabled><i class="fas fa-trash"></i></button>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endif %}
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+document.addEventListener("DOMContentLoaded", function() {
+    
+    // Lista de IDs de nodos para monitorear
+    const nodeIds = [
+        {% for node in nodes %}
+            {{ node.id }},
+        {% endfor %}
+    ];
+
+    async function fetchNodeHealth(nodeId) {
+        try {
+            const response = await fetch(`/orchestrator/node-health/${nodeId}`);
+            if (!response.ok) return; // Si falla silenciosamente, no rompemos el UI
+            const data = await response.json();
+            updateNodeUI(nodeId, data);
+        } catch (error) {
+            markNodeOffline(nodeId);
+        }
+    }
+
+    function updateNodeUI(id, data) {
+        // 1. Badge Estado
+        const badge = document.getElementById(`status_badge_${id}`);
+        if(badge) {
+            if (data.status === 'online') {
+                badge.className = 'badge bg-success';
+                badge.innerText = 'ONLINE';
+            } else {
+                markNodeOffline(id);
+                return;
+            }
+        }
+
+        // 2. CPU / RAM
+        // const cpuVal = data.cpu || 0;
+        // const ramVal = data.ram || 0;
+        
+        // if(document.getElementById(`cpu_bar_${id}`)) document.getElementById(`cpu_bar_${id}`).style.width = `${cpuVal}%`;
+        // if(document.getElementById(`ram_bar_${id}`)) document.getElementById(`ram_bar_${id}`).style.width = `${ramVal}%`;
+        
+        // if(document.getElementById(`cpu_text_${id}`)) document.getElementById(`cpu_text_${id}`).innerText = `${cpuVal.toFixed(1)}%`;
+        // if(document.getElementById(`ram_text_${id}`)) document.getElementById(`ram_text_${id}`).innerText = `${ramVal.toFixed(1)}%`;
+
+        // 2. CPU / RAM / P-CPU
+        const cpuVal = data.cpu || 0;
+        const pCpuVal = data.p_cpu_usage || data.p_cpu || 0; // Dependiendo de cómo lo despache tu API
+        const ramVal = data.ram || 0;
+        
+        if(document.getElementById(`cpu_bar_${id}`)) document.getElementById(`cpu_bar_${id}`).style.width = `${cpuVal}%`;
+        if(document.getElementById(`ram_bar_${id}`)) document.getElementById(`ram_bar_${id}`).style.width = `${ramVal}%`;
+        
+        if(document.getElementById(`cpu_text_${id}`)) document.getElementById(`cpu_text_${id}`).innerText = `${cpuVal.toFixed(1)}%`;
+        if(document.getElementById(`ram_text_${id}`)) document.getElementById(`ram_text_${id}`).innerText = `${ramVal.toFixed(1)}%`;
+
+        // Actualizar P-Cores si existen en la vista
+        if(document.getElementById(`p_cpu_bar_${id}`)) {
+            document.getElementById(`p_cpu_bar_${id}`).style.width = `${pCpuVal}%`;
+            document.getElementById(`p_cpu_text_${id}`).innerText = `${pCpuVal.toFixed(1)}%`;
+        }
+
+        // 3. LOAD
+        const loadEl = document.getElementById(`load_text_${id}`);
+        if (loadEl && data.load_1m !== undefined) {
+            loadEl.innerText = data.load_1m.toFixed(2);
+            // Colores según carga
+            if(data.load_1m > 4) loadEl.className = "fw-bold text-danger";
+            else if(data.load_1m > 2) loadEl.className = "fw-bold text-warning";
+            else loadEl.className = "fw-bold text-dark";
+        }
+
+        // 4. RED
+        // if (data.net_sent_mb !== undefined) {
+        //    const txEl = document.getElementById(`net_tx_${id}`);
+        //    const rxEl = document.getElementById(`net_rx_${id}`);
+        //    if(txEl) txEl.innerText = formatBytes(data.net_sent_mb);
+        //    if(rxEl) rxEl.innerText = formatBytes(data.net_recv_mb);
+        //}
+        if (data.net_tx_mbps !== undefined) {
+            const txEl = document.getElementById(`net_tx_${id}`);
+            const rxEl = document.getElementById(`net_rx_${id}`);
+            
+            // Ya no usamos formatBytes porque el dato ya viene calculado en Mbps
+            // Simplemente le agregamos la unidad "Mbps"
+            if(txEl) txEl.innerText = data.net_tx_mbps.toFixed(2) + " Mbps";
+            if(rxEl) rxEl.innerText = data.net_rx_mbps.toFixed(2) + " Mbps";
+        }
+    }
+
+    function markNodeOffline(id) {
+        const badge = document.getElementById(`status_badge_${id}`);
+        if(badge) {
+            badge.className = 'badge bg-danger';
+            badge.innerText = 'OFFLINE';
+        }
+        // Resetear valores visuales
+        if(document.getElementById(`cpu_text_${id}`)) document.getElementById(`cpu_text_${id}`).innerText = '-';
+        if(document.getElementById(`load_text_${id}`)) document.getElementById(`load_text_${id}`).innerText = '-';
+    }
+
+    function formatBytes(mb) {
+        if (mb > 1024) return (mb / 1024).toFixed(2) + " GB";
+        return mb.toFixed(1) + " MB";
+    }
+
+    function startMonitoring() {
+        nodeIds.forEach(id => {
+            fetchNodeHealth(id);
+        });
+    }
+
+    // Iniciar y repetir cada 3 segundos
+    startMonitoring();
+    setInterval(startMonitoring, 3000); 
+});
+</script>
+{% endblock %}

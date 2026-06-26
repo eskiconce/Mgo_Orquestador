@@ -1,0 +1,112 @@
+{% extends "base.html" %} 
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3 class="fw-bold"><i class="fas fa-terminal text-secondary me-2"></i>Logs del Orquestador</h3>
+        <p class="text-muted mb-0 small">Registro de eventos, advertencias y errores del sistema (Retención: 90 días)</p>
+    </div>
+</div>
+
+<!-- <div class="card shadow-sm border-0 mb-4" style="border-radius: 12px;">
+    <div class="card-body bg-light rounded">
+        <form method="GET" action="/ui/system-logs" class="row g-3 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label small fw-bold text-muted">Nivel de Log</label>
+                <select name="level" class="form-select font-monospace">
+                    <option value="">TODOS</option>
+                    <option value="INFO" {% if filters.level == 'INFO' %}selected{% endif %}>INFO</option>
+                    <option value="WARNING" {% if filters.level == 'WARNING' %}selected{% endif %}>WARNING</option>
+                    <option value="ERROR" {% if filters.level == 'ERROR' %}selected{% endif %}>ERROR</option>
+                </select>
+            </div>
+            <div class="col-md-7">
+                <label class="form-label small fw-bold text-muted">Buscar en el Mensaje (Ej: canal, IP, nodo, error...)</label>
+                <input type="text" name="search" class="form-control" placeholder="..." value="{{ filters.search }}">
+            </div>
+            <div class="col-md-2 d-flex gap-2">
+                <button type="submit" class="btn btn-dark fw-bold w-100"><i class="fas fa-search me-2"></i>Buscar</button>
+                <a href="/ui/system-logs" class="btn btn-outline-secondary" title="Limpiar Filtros"><i class="fas fa-times"></i></a>
+            </div>
+        </form>
+    </div>
+</div> -->
+
+<div class="card shadow-sm border-0 mb-4" style="border-radius: 12px;">
+    <div class="card-body bg-light rounded">
+        <form method="GET" action="/ui/system-logs" class="row g-3 align-items-end">
+            <div class="col-md-2">
+                <label class="form-label small fw-bold text-muted">Nivel de Log</label>
+                <select name="level" class="form-select font-monospace">
+                    <option value="">TODOS</option>
+                    <option value="INFO" {% if filters.level == 'INFO' %}selected{% endif %}>INFO</option>
+                    <option value="WARNING" {% if filters.level == 'WARNING' %}selected{% endif %}>WARNING</option>
+                    <option value="ERROR" {% if filters.level == 'ERROR' %}selected{% endif %}>ERROR</option>
+                </select>
+            </div>
+            <div class="col-md-4">
+                <label class="form-label small fw-bold text-muted">Buscar en el Mensaje</label>
+                <input type="text" name="search" class="form-control" placeholder="..." value="{{ filters.search }}">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small fw-bold text-muted">Fecha</label>
+                <input type="date" name="fecha" class="form-control text-secondary" value="{{ filters.fecha }}">
+            </div>
+            <div class="col-md-3 d-flex gap-2">
+                <button type="submit" class="btn btn-dark fw-bold w-100"><i class="fas fa-search me-2"></i>Filtrar</button>
+                <a href="/ui/system-logs" class="btn btn-outline-secondary" title="Limpiar Filtros"><i class="fas fa-times"></i></a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0" style="border-radius: 12px; overflow: hidden;">
+    <div class="table-responsive">
+        <table class="table table-hover table-sm align-middle mb-0 font-monospace" style="font-size: 0.85rem;">
+            <thead class="table-dark text-white"> 
+                <tr>
+                    <th class="ps-4" style="width: 180px;">Timestamp</th>
+                    <th style="width: 100px;">Nivel</th>
+                    <th>Mensaje del Evento</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for log in logs %}
+                <tr>
+                    <td class="ps-4 text-muted">{{ log.timestamp.strftime('%Y-%m-%d %H:%M:%S') }}</td>
+                    <td>
+                        {% if log.level == 'INFO' %}
+                            <span class="badge bg-success w-100 py-1">INFO</span>
+                        {% elif log.level == 'WARNING' %}
+                            <span class="badge bg-warning text-dark w-100 py-1">WARNING</span>
+                        {% elif log.level == 'ERROR' %}
+                            <span class="badge bg-danger w-100 py-1">ERROR</span>
+                        {% elif log.level == 'CRITICAL' %}
+                            <span class="badge bg-dark text-danger w-100 py-1 border border-danger">CRITICAL</span>
+                        {% else %}
+                            <span class="badge bg-secondary w-100 py-1">{{ log.level }}</span>
+                        {% endif %}
+                    </td>
+                    <td class="{% if log.level == 'ERROR' %}text-danger fw-bold{% elif log.level == 'WARNING' %}text-dark fw-bold{% else %}text-secondary{% endif %}">
+                        {{ log.message }}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="3" class="text-center py-5 text-muted">
+                        <i class="fas fa-clipboard-list fa-3x mb-3 text-light"></i>
+                        <h5>No se encontraron logs</h5>
+                        <p class="small">El sistema no ha registrado eventos con estos filtros.</p>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div> 
+
+
+
+
+
+{% endblock %}

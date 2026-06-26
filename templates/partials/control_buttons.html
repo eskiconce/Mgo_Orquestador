@@ -1,0 +1,47 @@
+
+    <button onclick="controlJob({{ job.id }}, 'start')"
+       class="btn btn-sm btn-success me-1"
+       title="Iniciar"
+       {% if job.status == 'running' %}disabled style="opacity: 0.5; cursor: not-allowed;"{% endif %}>
+       <i class="fas fa-play"></i>
+    </button>
+    
+    <button onclick="controlJob({{ job.id }}, 'restart')"
+       class="btn btn-sm btn-warning text-dark me-1"
+       title="Reiniciar Proceso (Reset)"
+       {% if job.status != 'running' %}disabled style="opacity: 0.5; cursor: not-allowed;"{% endif %}>
+       <i class="fas fa-sync-alt"></i>
+    </button>
+
+    <button onclick="controlJob({{ job.id }}, 'stop')"
+       class="btn btn-sm btn-danger me-1"
+       title="Detener"
+       {% if job.status == 'stopped' %}disabled style="opacity: 0.5; cursor: not-allowed;"{% endif %}>
+       <i class="fas fa-stop"></i>
+    </button>
+
+    {% if job.status == 'running' or job.status == 'starting' %}
+        <button type="button" class="btn btn-sm btn-secondary" disabled title="Detenga el proceso para editar">
+           🔒 Editar
+       </button>
+    {% else %}
+       <button type="button"
+            class="btn btn-sm btn-primary"
+            data-bs-toggle="modal"
+            data-bs-target="#editCommandModal"
+            onclick="loadCommandIntoModal('{{ job.id }}')">
+            ✏️ Editar
+       </button>
+    {% endif %}
+    <textarea id="raw_command_{{ job.id }}" style="display:none;">{{ job.command }}</textarea>
+
+    <a href="/ui/processes/logs/{{ job.id }}" class="btn btn-sm btn-info text-white me-1" title="Ver Logs en Vivo">
+       <i class="fas fa-file-alt"></i>
+    </a>
+
+    <a href="/ui/processes/delete/{{ job.id }}"
+       class="btn btn-sm btn-outline-secondary"
+       onclick="return confirm('ATENCIÓN:\n\n¿Confirma eliminación de este proceso?\n\nEsta acción borrará la configuración y no se puede deshacer.')"
+       title="Eliminar Configuración">
+       <i class="fas fa-trash"></i>
+    </a>

@@ -1,0 +1,107 @@
+<!DOCTYPE html> 
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mundogo TV Manager</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    
+    <style>
+        body { background-color: #f4f6f9; }
+        .navbar-brand { font-weight: bold; letter-spacing: 0.5px; }
+        .nav-link { font-weight: 500; }
+        .nav-link.active { color: #ffc107 !important; } /* Amarillo para la sección activa */
+        
+        /* Ajuste para el dropdown de usuario */
+        .user-dropdown-menu { border: none; box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.15); }
+    </style>
+</head>
+<body>
+
+<nav class="navbar navbar-expand-lg navbar-dark bg-dark mb-4 sticky-top shadow-sm">
+    <div class="container">
+        <a class="navbar-brand text-warning" href="/">
+            <i class="fas fa-network-wired me-2"></i>MundoGo Operaciones
+        </a>
+        
+        <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#navbarMain">
+            <span class="navbar-toggler-icon"></span>
+        </button>
+
+        <div class="collapse navbar-collapse" id="navbarMain">
+            {% if user %} <ul class="navbar-nav me-auto mb-2 mb-lg-0">
+                <li class="nav-item">
+                    <a class="nav-link" href="/"><i class="fas fa-tachometer-alt me-1"></i> Dashboard</a>
+                </li>
+                <!--
+                <li class="nav-item">
+                    <a class="nav-link text-white mb-2 rounded {% if current_page == 'signals' %}active bg-primary{% endif %}" href="/ui/signals">
+                        <i class="fas fa-satellite-dish me-2"></i> Señales
+                    </a>
+                </li>
+                -->
+                <li class="nav-item">
+                    <a class="nav-link" href="/ui/channels"><i class="fas fa-list me-1"></i> Canales</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/ui/nodes"><i class="fas fa-server me-1"></i> Nodos</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/ui/processes"><i class="fas fa-cogs me-1"></i> Procesos</a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/ui/recordings"><i class="fas fa-video me-1"></i> Vod.Log </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/ui/system-logs"><i class="fas fa-terminal me-1"></i> System.Log </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="/ui/monitor-logs"><i class="fas fa-heartbeat me-1"></i> Monitor.Log </a>
+                </li>
+            </ul>
+
+            <ul class="navbar-nav ms-auto border-start ps-lg-3">
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle text-light" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="fas fa-user-circle me-1"></i> {{ user.full_name or user.username }}
+                    </a>
+                    <ul class="dropdown-menu dropdown-menu-end user-dropdown-menu" aria-labelledby="userDropdown">
+                        <li><h6 class="dropdown-header">Usuario: {{ user.username }}</h6></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li>
+                            <a class="dropdown-item text-danger fw-bold" href="/logout">
+                                <i class="fas fa-sign-out-alt me-2"></i>Cerrar Sesión
+                            </a>
+                        </li>
+                    </ul>
+                </li>
+            </ul>
+            {% endif %}
+        </div>
+    </div>
+</nav>
+
+<div class="container pb-5">
+    {% block content %}
+    {% endblock %}
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        const currentPath = window.location.pathname;
+        const navLinks = document.querySelectorAll('.nav-link');
+        
+        navLinks.forEach(link => {
+            // Si el href del link coincide con la URL actual, le ponemos 'active'
+            if (link.getAttribute('href') === currentPath) {
+                link.classList.add('active');
+            }
+        });
+    });
+</script>
+
+</body>
+</html>

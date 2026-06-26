@@ -1,0 +1,23 @@
+/
+├── main.py                 # Punto de entrada y Rutas de la UI
+├── database.py             # Configuración de base de datos
+├── models.py               # Modelos SQLAlchemy
+├── crear_usuario.py        # Crear usuario plataforma
+├── core/
+│   ├── config.py           # Constantes (API_KEY, URLs, Puertos)
+│   └── logging_service.py  # Interceptor de logs a DB
+├── services/
+│   ├── builders.py         # Generadores de scripts (FFmpeg/Shaka)
+│   ├── vod_service.py      # Lógica de Webhooks y Cleanup
+│   └── cms_gateway.py      # Lógica de la API para el CMS
+├── utils/
+│   └── helpers.py          # Filtros Jinja2 (duration) y utilidades
+├── templates	
+│	└── archivos html front-end
+├── static	
+│	└── css js logo.png
+├── logs
+│	└──	logs de actividades
+├──	run
+│
+└──	venv --> entorno python3

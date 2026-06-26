@@ -1,0 +1,125 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-xl-11">
+        <form action="/ui/job/save" method="POST">
+            <div class="card shadow-lg border-0 mb-4">
+                <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center">
+                    <h4 class="mb-0"><i class="fas fa-layer-group me-2"></i>Alta de Nuevo Canal</h4>
+                    <a href="/ui/jobs" class="btn btn-sm btn-outline-light">Cancelar</a>
+                </div>
+                
+                <div class="card-body bg-light">
+                    <h5 class="text-primary border-bottom pb-2 mb-3">1. Identificación</h5>
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-3">
+                            <label class="fw-bold form-label">Nombre Canal</label>
+                            <input type="text" name="channel_name" class="form-control" placeholder="Ej: Space HD" required>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="fw-bold form-label">ID Único (unique_id)</label>
+                            <input type="text" name="unique_id" class="form-control" placeholder="Ej: space_hd_01" required>
+                            <div class="form-text small">Sin espacios (ej: canal_uno)</div>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="fw-bold form-label">Tipo Servicio</label>
+                            <select name="service_type" class="form-select">
+                                <option value="tv">TV Lineal</option>
+                                <option value="ott">OTT</option>
+                            </select>
+                        </div>
+                        <div class="col-md-3">
+                            <label class="fw-bold form-label">Protocolo IN</label>
+                            <select name="input_protocol" class="form-select">
+                                <option value="udp">UDP Multicast</option>
+                                <option value="srt">SRT</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <h5 class="text-success border-bottom pb-2 mb-3">2. Origen (Input)</h5>
+                    <div class="row g-3 mb-4 p-3 bg-white rounded border">
+                        <div class="col-md-4">
+                            <label class="fw-bold form-label">Multicast IP Origen</label>
+                            <input type="text" name="origin_multicast_ip" class="form-control" placeholder="226.0.0.100" required>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="fw-bold form-label">Puerto Origen</label>
+                            <input type="number" name="origin_multicast_port" class="form-control" placeholder="1000" required>
+                        </div>
+                         <div class="col-md-3">
+                            <label class="fw-bold form-label">Video Codec</label>
+                            <input type="text" name="video_codec" class="form-control" value="h264">
+                        </div>
+                        <div class="col-md-3">
+                            <label class="fw-bold form-label">Audio Codec</label>
+                            <input type="text" name="audio_codec" class="form-control" value="aac">
+                        </div>
+                    </div>
+
+                    <h5 class="text-danger border-bottom pb-2 mb-3">3. Salida Encoder (Output)</h5>
+                    <div class="row g-3 mb-4 p-3 bg-white rounded border">
+                        <div class="col-md-4">
+                            <label class="fw-bold form-label">Multicast IP Salida</label>
+                            <input type="text" name="multicast_ip_out" class="form-control" placeholder="226.3.3.100" required>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="fw-bold form-label">Port 1080p</label>
+                            <input type="number" name="port_1080p" class="form-control" placeholder="3140">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="fw-bold form-label">Port 480p</label>
+                            <input type="number" name="port_480p" class="form-control" placeholder="3141">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="fw-bold form-label">Port Audio</label>
+                            <input type="number" name="port_audio" class="form-control" placeholder="3142">
+                        </div>
+                        <div class="col-md-2">
+                            <label class="fw-bold form-label">Bitrate (k)</label>
+                            <input type="number" name="bitrate_p1" class="form-control" value="8000">
+                        </div>
+                    </div>
+
+                    <h5 class="text-warning border-bottom pb-2 mb-3">4. Asignación Hardware</h5>
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <div class="card h-100 border-primary">
+                                <div class="card-header bg-primary text-white">Encoder (Mac M4)</div>
+                                <div class="card-body">
+                                    <label class="form-label">Nodo Encoder</label>
+                                    <select name="encoder_node_id" class="form-select" required>
+                                        <option value="" disabled selected>-- Elegir Mac --</option>
+                                        {% for node in nodes %}
+                                            <option value="{{ node.id }}">{{ node.hostname }} ({{ node.ip_address }})</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                        <div class="col-md-6">
+                            <div class="card h-100 border-warning">
+                                <div class="card-header bg-warning text-dark">Packager (Linux)</div>
+                                <div class="card-body">
+                                    <label class="form-label">Nodo Packager (Opcional)</label>
+                                    <select name="packager_node_id" class="form-select">
+                                        <option value="">-- No usar --</option>
+                                        {% for node in nodes %}
+                                            <option value="{{ node.id }}">{{ node.hostname }} ({{ node.ip_address }})</option>
+                                        {% endfor %}
+                                    </select>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card-footer text-end">
+                    <button type="submit" class="btn btn-success btn-lg"><i class="fas fa-save"></i> Guardar Configuración</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+{% endblock %}

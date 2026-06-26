@@ -1,0 +1,159 @@
+{% extends "base.html" %} 
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3 class="fw-bold"><i class="fas fa-video text-primary me-2"></i>Auditoría de Grabaciones VOD</h3>
+        <p class="text-muted mb-0 small">Historial de tareas solicitadas por el CMS</p>
+    </div>
+</div>
+
+<!-- <div class="card shadow-sm border-0 mb-4" style="border-radius: 12px;">
+    <div class="card-body bg-light rounded">
+        <form method="GET" action="/ui/recordings" class="row g-3 align-items-end">
+            <div class="col-md-3">
+                <label class="form-label small fw-bold text-muted">ID de Proceso</label>
+                <input type="text" name="process_id" class="form-control font-monospace" placeholder="Ej: VOD_12345" value="{{ filters.process_id }}">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small fw-bold text-muted">Nombre del Canal</label>
+                <input type="text" name="canal" class="form-control" placeholder="Ej: tvn_hd" value="{{ filters.canal }}">
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small fw-bold text-muted">Fecha de Creación</label>
+                <input type="date" name="fecha" class="form-control text-secondary" value="{{ filters.fecha }}">
+            </div>
+            <div class="col-md-3 d-flex gap-2">
+                <button type="submit" class="btn btn-primary fw-bold w-100"><i class="fas fa-search me-2"></i>Filtrar</button>
+                <a href="/ui/recordings" class="btn btn-outline-secondary" title="Limpiar Filtros"><i class="fas fa-times"></i></a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0" style="border-radius: 12px; overflow: hidden;">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-dark text-white" style="font-size: 0.85rem; text-transform: uppercase;"> 
+                <tr>
+                    <th class="ps-4">ID</th>
+                    <th>Process ID</th>
+                    <th>Canal</th>
+                    <th>Nodo / Hostname</th>
+                    <th>Estado</th>
+                    <th>Timestamps</th>
+                    <th class="text-center pe-4">Protección (Uso)</th>
+                </tr>
+            </thead> -->
+<div class="card shadow-sm border-0 mb-4" style="border-radius: 12px;">
+    <div class="card-body bg-light rounded">
+        <form method="GET" action="/ui/recordings" class="row g-3 align-items-end">
+            <div class="col-md-2">
+                <label class="form-label small fw-bold text-muted">ID de Proceso</label>
+                <input type="text" name="process_id" class="form-control font-monospace" placeholder="Ej: VOD_12345" value="{{ filters.process_id }}">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small fw-bold text-muted">Nombre del Canal</label>
+                <input type="text" name="canal" class="form-control" placeholder="Ej: tvn_hd" value="{{ filters.canal }}">
+            </div>
+            <div class="col-md-2">
+                <label class="form-label small fw-bold text-muted">Estado</label>
+                <select name="status" class="form-select">
+                    <option value="">TODOS</option>
+                    <option value="success" {% if filters.status == 'success' %}selected{% endif %}>ÉXITO</option>
+                    <option value="error" {% if filters.status == 'error' %}selected{% endif %}>ERROR</option>
+                    <option value="pending" {% if filters.status == 'pending' %}selected{% endif %}>PENDIENTE</option>
+                    <option value="deleted" {% if filters.status == 'deleted' %}selected{% endif %}>BORRADO</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label small fw-bold text-muted">Fecha de Creación</label>
+                <input type="date" name="fecha" class="form-control text-secondary" value="{{ filters.fecha }}">
+            </div>
+            <div class="col-md-3 d-flex gap-2">
+                <button type="submit" class="btn btn-primary fw-bold w-100"><i class="fas fa-search me-2"></i>Filtrar</button>
+                <a href="/ui/recordings" class="btn btn-outline-secondary" title="Limpiar Filtros"><i class="fas fa-times"></i></a>
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="card shadow-sm border-0" style="border-radius: 12px; overflow: hidden;">
+    <div class="table-responsive">
+        <table class="table table-hover align-middle mb-0">
+            <thead class="table-dark text-white" style="font-size: 0.85rem; text-transform: uppercase;"> 
+                <tr>
+                    <th class="ps-4">ID</th>
+                    <th>Process ID</th>
+                    <th>Canal</th>
+                    <th>Nodo / Hostname</th>
+                    <th>Estado</th>
+                    <th>Timestamps</th>
+                    <th class="text-center pe-4">Bloqueo de Borrado</th>
+                </tr>
+            </thead>
+            <tbody style="font-size: 0.9rem;">
+                {% for rec in recordings %}
+                <tr>
+                    <td class="ps-4 text-muted fw-bold">#{{ rec.id }}</td>
+                    <td class="font-monospace text-primary fw-bold">{{ rec.process_id }}</td>
+                    <td>
+                        <span class="badge bg-light text-dark border">{{ rec.canal|upper }}</span>
+                    </td>
+                    <td>
+                        {% if rec.node %}
+                            <i class="fas fa-server text-secondary me-1"></i> <span class="fw-bold">{{ rec.node.hostname }}</span><br>
+                            <small class="text-muted" style="font-size: 0.75rem;">(ID: {{ rec.node_id }})</small>
+                        {% else %}
+                            <span class="text-danger small"><i class="fas fa-exclamation-circle me-1"></i>Nodo Borrado</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if rec.status == 'success' %}
+                            <span class="badge bg-success shadow-sm"><i class="fas fa-check-circle me-1"></i>ÉXITO</span>
+                        {% elif rec.status == 'error' %}
+                            <span class="badge bg-danger shadow-sm"><i class="fas fa-times-circle me-1"></i>ERROR</span>
+                        {% elif rec.status == 'deleted' %}
+                            <span class="badge bg-secondary shadow-sm"><i class="fas fa-trash-alt me-1"></i>BORRADO</span>
+                        {% else %}
+                            <span class="badge bg-warning text-dark shadow-sm"><i class="fas fa-spinner fa-spin me-1"></i>{{ rec.status|upper }}</span>
+                        {% endif %}
+                        
+                        {% if rec.output_dir %}
+                            <br><small class="text-muted d-inline-block text-truncate mt-1" style="max-width: 150px;" title="{{ rec.output_dir }}">{{ rec.output_dir }}</small>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="small">
+                            <span class="text-muted">Inicio:</span> <strong>{{ rec.created_at.strftime('%Y-%m-%d %H:%M:%S') if rec.created_at else '-' }}</strong><br>
+                            <span class="text-muted">Fin:</span> {{ rec.finished_at.strftime('%Y-%m-%d %H:%M:%S') if rec.finished_at else 'En progreso...' }}
+                        </div>
+                    </td>
+                    <td class="text-center pe-4">
+                        {% if rec.in_use %}
+                            <span class="badge bg-danger bg-opacity-10 text-danger border border-danger px-2 py-1" title="Protegido contra borrado automático">
+                                <i class="fas fa-lock me-1"></i> EN USO
+                            </span>
+                            <br>
+                            <small class="text-muted" style="font-size: 0.7rem;">Desde: {{ rec.in_use_since.strftime('%d-%b %H:%M') if rec.in_use_since else '' }}</small>
+                        {% else %}
+                            <span class="badge bg-light text-muted border px-2 py-1">
+                                <i class="fas fa-unlock me-1"></i> Libre
+                            </span>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% else %}
+                <tr>
+                    <td colspan="7" class="text-center py-5 text-muted">
+                        <i class="fas fa-folder-open fa-3x mb-3 text-light"></i>
+                        <h5>No se encontraron grabaciones</h5>
+                        <p class="small">Modifique los filtros o espere a que el CMS envíe nuevas solicitudes.</p>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+{% endblock %}

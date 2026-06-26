@@ -1,0 +1,152 @@
+{% extends "base.html" %}
+
+{% block content %}
+<head>
+    <script src="https://cdn.jsdelivr.net/npm/sweetalert2@11"></script>
+    <style>
+        .shadow-pulse {
+            box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7);
+            animation: pulse-red 1.5s infinite;
+        }
+        @keyframes pulse-red {
+            0% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(220, 53, 69, 0.7); }
+            70% { transform: scale(1); box-shadow: 0 0 0 8px rgba(220, 53, 69, 0); }
+            100% { transform: scale(0.95); box-shadow: 0 0 0 0 rgba(220, 53, 69, 0); }
+        }
+        .signal-card { transition: transform 0.2s; border-radius: 10px; }
+        .signal-card:hover { transform: translateY(-3px); box-shadow: 0 8px 15px rgba(0,0,0,0.1) !important; }
+        .grid-signals { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 1.2rem; }
+        .bg-in { background-color: #f8f9fa; border-radius: 6px; padding: 8px; }
+        .bg-out { background-color: #f1f3f5; border-radius: 6px; padding: 8px; }
+    </style>
+</head>
+
+<div class="container-fluid p-0">
+    <div class="row mb-4 align-items-center">
+        <div class="col">
+            <h2 class="fw-bold"><i class="fas fa-satellite-dish text-primary me-2"></i>Monitoreo de Señales</h2>
+            <p class="text-muted">Diagnóstico de Entrada (Multicast Origen) y Salida (Multicast Encoder).</p>
+        </div>
+        <div class="col-auto">
+            <span class="badge bg-dark px-3 py-2" id="last-update">Actualizando...</span>
+        </div>
+    </div>
+
+    <div class="grid-signals" id="signals-container">
+        {% for job in jobs %}
+        <div class="card signal-card shadow-sm border-0 h-100">
+            <div class="card-body d-flex flex-column">
+                
+                <div class="d-flex justify-content-between align-items-center mb-3 border-bottom pb-2">
+                    <h5 class="fw-bold mb-0 text-truncate text-primary" style="max-width: 80%;">{{ job.channel.channel_name }}</h5>
+                    <button class="btn btn-sm btn-light border p-1" onclick="showSnapshot('{{ job.id }}', '{{ job.channel.channel_name }}')" title="Ver captura visual">
+                        <i class="fas fa-camera text-dark"></i>
+                    </button>
+                </div>
+                
+                <div class="bg-in mb-2 d-flex justify-content-between align-items-center">
+                    <div>
+                        <small class="fw-bold text-secondary d-block"><i class="fas fa-sign-in-alt me-1"></i>IN (Origen)</small>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <span id="in_badge_{{ job.id }}" class="badge rounded-pill bg-secondary text-white px-2 py-1" style="font-size: 0.65rem;">
+                            WAIT...
+                        </span>
+                        <div id="led_in_{{ job.id }}" class="rounded-circle bg-secondary" style="width: 14px; height: 14px;" title="Cargando estado..."></div>
+                    </div>
+                </div>
+
+                <div class="bg-out mb-3 d-flex justify-content-between align-items-center">
+                    <div>
+                        <small class="fw-bold text-secondary d-block"><i class="fas fa-sign-out-alt me-1"></i>OUT (Encoder)</small>
+                    </div>
+                    <div class="d-flex align-items-center gap-2">
+                        <span id="out_badge_{{ job.id }}" class="badge rounded-pill bg-secondary text-white px-2 py-1" style="font-size: 0.65rem;">
+                            WAIT...
+                        </span>
+                        <div id="led_out_{{ job.id }}" class="rounded-circle bg-secondary" style="width: 14px; height: 14px;" title="Cargando estado..."></div>
+                    </div>
+                </div>
+                
+                <div class="mt-auto pt-2 border-top">
+                    <small class="text-muted d-inline-block" style="font-size: 0.75rem;"><i class="fas fa-server me-1"></i>Nodo Asignado:</small>
+                    <span class="small fw-bold text-dark float-end">{{ job.node.hostname }}</span>
+                </div>
+
+            </div>
+        </div>
+        {% else %}
+        <div class="col-12"><p class="text-muted fst-italic">No hay canales en procesamiento actualmente.</p></div>
+        {% endfor %}
+    </div>
+</div>
+
+<script>
+    async function fetchSignalsStatus() {
+        try {
+            const response = await fetch('/api/signals/status');
+            const data = await response.json();
+            
+            data.signals.forEach(job => {
+                // Elementos IN (Origen)
+                const ledIn = document.getElementById(`led_in_${job.id}`);
+                const badgeIn = document.getElementById(`in_badge_${job.id}`);
+                
+                // Elementos OUT (Encoder)
+                const ledOut = document.getElementById(`led_out_${job.id}`);
+                const badgeOut = document.getElementById(`out_badge_${job.id}`);
+                
+                // --- LÓGICA ENTRADA (IN) ---
+                if (ledIn && badgeIn) {
+                    if (job.source_status === 'up') {
+                        ledIn.className = 'bg-success rounded-circle';
+                        badgeIn.innerText = "VIDEO OK";
+                        badgeIn.className = "badge rounded-pill text-success border border-success bg-white px-2 py-1";
+                    } else if (job.source_status === 'down') {
+                        ledIn.className = 'bg-danger shadow-pulse rounded-circle';
+                        badgeIn.innerText = "NO SIGNAL";
+                        badgeIn.className = "badge rounded-pill bg-dark text-white px-2 py-1";
+                    } else {
+                        ledIn.className = 'bg-secondary rounded-circle';
+                    }
+                }
+
+                // --- LÓGICA SALIDA (OUT) ---
+                if (ledOut && badgeOut) {
+                    if (job.output_status === 'up') {
+                        ledOut.className = 'bg-success rounded-circle';
+                        badgeOut.innerText = "TX OK";
+                        badgeOut.className = "badge rounded-pill text-success border border-success bg-white px-2 py-1";
+                    } else if (job.output_status === 'down') {
+                        ledOut.className = 'bg-danger shadow-pulse rounded-circle';
+                        badgeOut.innerText = "TX FAIL";
+                        badgeOut.className = "badge rounded-pill bg-danger text-white px-2 py-1";
+                    } else {
+                        ledOut.className = 'bg-secondary rounded-circle';
+                    }
+                }
+            });
+            document.getElementById('last-update').innerText = `Última actualización: ${new Date().toLocaleTimeString()}`;
+        } catch (error) {
+            console.error('Error actualizando señales:', error);
+        }
+    }
+
+    window.showSnapshot = function(jobId, channelName) {
+        const imageUrl = `/snapshots/job_${jobId}.jpg?t=${new Date().getTime()}`;
+        Swal.fire({
+            title: channelName,
+            text: 'Última captura (Actualiza cada 10s)',
+            imageUrl: imageUrl,
+            imageWidth: 400,
+            imageAlt: 'Captura de señal',
+            confirmButtonText: 'Cerrar',
+            confirmButtonColor: '#2c3e50',
+            backdrop: `rgba(44, 62, 80, 0.4)`
+        });
+    }
+
+    fetchSignalsStatus();
+    setInterval(fetchSignalsStatus, 5000);
+</script>
+{% endblock %}

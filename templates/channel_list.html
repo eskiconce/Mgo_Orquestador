@@ -1,0 +1,277 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    /* SCROLL INTERNO Y CABECERAS FIJAS */
+    .table-card {
+        border-radius: 12px;
+        overflow: hidden;
+        border: 1px solid #e9ecef;
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.05);
+        background: #fff;
+    }
+    .table-container {
+        max-height: 70vh; /* Ocupa máximo el 70% de la pantalla */
+        overflow-y: auto;
+        overflow-x: auto;
+    }
+    .table-container thead th {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        background-color: #f8f9fa; /* Fondo fijo para la cabecera */
+        box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.1); 
+    }
+
+    /* BORDES LATERALES DE ESTADO (SALUD DEL CANAL) */
+    .status-border-online { border-left: 4px solid #198754 !important; }
+    .status-border-error { border-left: 4px solid #dc3545 !important; }
+    .status-border-incomplete { border-left: 4px solid #ffc107 !important; }
+    .status-border-offline { border-left: 4px solid #6c757d !important; }
+
+    .table-hover tbody tr:hover {
+        background-color: #f8f9fc;
+    }
+    
+    /* Estilos para los filtros rápidos */
+    .quick-filters .btn { border-radius: 20px; font-size: 0.85rem; font-weight: bold; }
+    .quick-filters .badge { font-size: 0.75rem; vertical-align: middle; }
+
+    @keyframes heartbeat {
+        0% { transform: scale(1); opacity: 1; }
+        50% { transform: scale(1.3); opacity: 0.7; }
+        100% { transform: scale(1); opacity: 1; }
+    }
+    .heartbeat-icon { animation: heartbeat 2s infinite ease-in-out; }
+</style>
+
+<div class="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-3">
+    <div>
+        <h3 class="fw-bold text-dark mb-0"><i class="fas fa-satellite-dish text-primary me-2"></i>Inventario de Canales</h3>
+        <p class="text-muted mb-0 small">Gestión y despliegue físico de señales VOD y Live</p>
+    </div>
+    
+    <div class="d-flex gap-3 align-items-center">
+        <div class="input-group shadow-sm" style="border-radius: 8px; overflow: hidden; min-width: 250px;">
+            <span class="input-group-text bg-white border-0"><i class="fas fa-search text-muted"></i></span>
+            <input type="text" id="searchChannelInput" class="form-control border-0 bg-white" placeholder="Buscar canal, IP..." autocomplete="off">
+        </div>
+
+        <a href="/ui/channels/new" class="btn btn-primary text-nowrap fw-bold shadow-sm" style="border-radius: 8px;">
+            <i class="fas fa-plus-circle me-2"></i>Nuevo Canal
+        </a>
+    </div>
+</div>
+
+<div class="d-flex mb-3">
+    <div class="btn-group quick-filters shadow-sm" role="group">
+        <input type="radio" class="btn-check channel-filter" name="channelFilter" id="btnAll" value="all" autocomplete="off" checked>
+        <label class="btn btn-outline-dark px-3" for="btnAll">Todos <span class="badge bg-secondary ms-1" id="badge-all">0</span></label>
+
+        <input type="radio" class="btn-check channel-filter" name="channelFilter" id="btnOnline" value="online" autocomplete="off">
+        <label class="btn btn-outline-success px-3" for="btnOnline" title="Encoder y Packager Corriendo"><i class="fas fa-check-circle me-1"></i>Operativos <span class="badge bg-success ms-1" id="badge-online">0</span></label>
+
+        <input type="radio" class="btn-check channel-filter" name="channelFilter" id="btnError" value="error" autocomplete="off">
+        <label class="btn btn-outline-danger px-3" for="btnError" title="Hay procesos con error"><i class="fas fa-exclamation-triangle me-1"></i>Con Errores <span class="badge bg-danger ms-1" id="badge-error">0</span></label>
+        
+        <input type="radio" class="btn-check channel-filter" name="channelFilter" id="btnIncomplete" value="incomplete" autocomplete="off">
+        <label class="btn btn-outline-warning text-dark px-3" for="btnIncomplete" title="Falta configurar nodo Encoder o Packager"><i class="fas fa-tools me-1"></i>Incompletos <span class="badge bg-warning text-dark ms-1" id="badge-incomplete">0</span></label>
+    </div>
+</div>
+
+<div class="card table-card border-0">
+    <div class="table-container">
+        <table class="table table-hover align-middle mb-0 bg-white" id="channelsTable">
+            <thead class="text-uppercase" style="font-size: 0.85rem;">
+                <tr>
+                    <th onclick="sortTable(0, 'num')" style="cursor: pointer;" class="text-muted ps-4"><i class="fas fa-sort me-1"></i>ID</th>
+                    <th onclick="sortTable(1, 'str')" style="cursor: pointer;" class="text-muted"><i class="fas fa-sort me-1"></i>Canal / Unique ID</th>
+                    <th onclick="sortTable(2, 'str')" style="cursor: pointer;" class="text-muted"><i class="fas fa-sort me-1"></i>Despliegue Físico (Estado)</th>
+                    <th class="text-muted">Input Mcast (Origen)</th>
+                    <th class="text-muted">Output Mcast (Destino)</th>
+                    <th class="text-end text-muted pe-4">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for c in channels %}
+                
+                {% set ns = namespace(enc_job=None, pkg_job=None) %}
+                {% for j in c.jobs %}
+                    {% if j.node.tipo == 'Encoder' %}{% set ns.enc_job = j %}{% endif %}
+                    {% if j.node.tipo == 'Packager' %}{% set ns.pkg_job = j %}{% endif %}
+                {% endfor %}
+
+                {% set channel_health = 'offline' %}
+                {% if not ns.enc_job or not ns.pkg_job %}
+                    {% set channel_health = 'incomplete' %}
+                {% elif ns.enc_job.status == 'error' or ns.pkg_job.status == 'error' %}
+                    {% set channel_health = 'error' %}
+                {% elif ns.enc_job.status == 'running' and ns.pkg_job.status == 'running' %}
+                    {% set channel_health = 'online' %}
+                {% endif %}
+
+                <tr class="searchable-row status-border-{{ channel_health }}" data-health="{{ channel_health }}">
+                    <td class="fw-bold text-muted ps-4">#{{ c.id }}</td>
+                    
+                    <td>
+                        <span class="fw-bold text-dark fs-6">{{ c.channel_name }}</span><br>
+                        <small class="text-muted font-monospace"><i class="fas fa-hashtag me-1"></i>{{ c.unique_id }}</small>
+                    </td>
+
+                    <td>
+                        <div class="d-flex flex-column gap-1">
+                            {% if ns.enc_job %}
+                                <div class="d-flex align-items-center">
+                                    {% if ns.enc_job.status == 'running' %}
+                                        <i class="fas fa-circle text-success me-2 heartbeat-icon" style="font-size: 0.7rem;" title="Corriendo"></i>
+                                    {% elif ns.enc_job.status == 'starting' %}
+                                        <i class="fas fa-circle text-warning me-2" style="font-size: 0.7rem;" title="Iniciando"></i>
+                                    {% else %}
+                                        <i class="fas fa-circle text-danger me-2" style="font-size: 0.7rem;" title="Detenido / Error"></i>
+                                    {% endif %}
+                                    <span class="badge bg-primary bg-opacity-10 text-primary border border-primary me-2" style="width: 45px;">ENC</span>
+                                    <small class="fw-bold text-secondary">{{ ns.enc_job.node.hostname }}</small>
+                                </div>
+                            {% else %}
+                                <div class="d-flex align-items-center opacity-50">
+                                    <i class="fas fa-circle text-secondary me-2" style="font-size: 0.7rem;"></i>
+                                    <span class="badge bg-light text-secondary border me-2" style="width: 45px;">ENC</span>
+                                    <small class="text-muted fst-italic">Sin asignar</small>
+                                </div>
+                            {% endif %}
+
+                            {% if ns.pkg_job %}
+                                <div class="d-flex align-items-center">
+                                    {% if ns.pkg_job.status == 'running' %}
+                                        <i class="fas fa-circle text-success me-2 heartbeat-icon" style="font-size: 0.7rem;" title="Corriendo"></i>
+                                    {% elif ns.pkg_job.status == 'starting' %}
+                                        <i class="fas fa-circle text-warning me-2" style="font-size: 0.7rem;" title="Iniciando"></i>
+                                    {% else %}
+                                        <i class="fas fa-circle text-danger me-2" style="font-size: 0.7rem;" title="Detenido / Error"></i>
+                                    {% endif %}
+                                    <span class="badge bg-warning bg-opacity-25 text-dark border border-warning me-2" style="width: 45px;">PKG</span>
+                                    <small class="fw-bold text-secondary">{{ ns.pkg_job.node.hostname }}</small>
+                                </div>
+                            {% else %}
+                                <div class="d-flex align-items-center opacity-50">
+                                    <i class="fas fa-circle text-secondary me-2" style="font-size: 0.7rem;"></i>
+                                    <span class="badge bg-light text-secondary border me-2" style="width: 45px;">PKG</span>
+                                    <small class="text-muted fst-italic">Sin asignar</small>
+                                </div>
+                            {% endif %}
+                        </div>
+                    </td>
+
+                    <td>
+                        <span class="badge bg-light text-dark border font-monospace px-2 py-1"><i class="fas fa-sign-in-alt text-muted me-1"></i>{{ c.origin_multicast_ip }}:{{ c.origin_multicast_port }}</span>
+                        {% if c.origin_count == 2 %}
+                        <br><span class="badge bg-danger bg-opacity-10 text-danger border border-danger font-monospace px-2 py-1 mt-1"><i class="fas fa-random me-1"></i>Respaldo Activo</span>
+                        {% endif %}
+                    </td>
+                    
+                    <td>
+                        <span class="badge bg-success bg-opacity-10 text-success border border-success font-monospace px-2 py-1"><i class="fas fa-sign-out-alt me-1"></i>{{ c.multicast_ip_out }}</span>
+                    </td>
+                    
+                    <td class="text-end pe-4">
+                        <a href="/ui/channels/edit/{{ c.id }}" class="btn btn-sm btn-outline-primary shadow-sm" title="Editar Canal"><i class="fas fa-edit"></i> Editar</a>
+                        <a href="/ui/channels/delete/{{ c.id }}" class="btn btn-sm btn-outline-danger shadow-sm ms-1" onclick="return confirm('Peligro: ¿Desea borrar este canal del inventario?')" title="Eliminar"><i class="fas fa-trash"></i></a>
+                    </td>
+                </tr>
+                {% else %}
+                <tr><td colspan="6" class="text-center py-5 text-muted"><i class="fas fa-inbox fa-3x mb-3 opacity-25"></i><br>No hay canales configurados en el inventario.</td></tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<script>
+// --- Lógica Combinada: Búsqueda de texto y Filtros de estado ---
+function updateFilterCounts() {
+    let counts = { all: 0, online: 0, error: 0, incomplete: 0 };
+    
+    document.querySelectorAll('.searchable-row').forEach(row => {
+        let health = row.getAttribute('data-health');
+        counts.all++;
+        if (health === 'online') counts.online++;
+        else if (health === 'error') counts.error++;
+        else if (health === 'incomplete') counts.incomplete++;
+    });
+
+    document.getElementById('badge-all').innerText = counts.all;
+    document.getElementById('badge-online').innerText = counts.online;
+    document.getElementById('badge-error').innerText = counts.error;
+    document.getElementById('badge-incomplete').innerText = counts.incomplete;
+}
+
+function filterTable() {
+    const textFilter = document.getElementById('searchChannelInput').value.toLowerCase().trim();
+    const statusFilter = document.querySelector('input[name="channelFilter"]:checked').value;
+
+    document.querySelectorAll('.searchable-row').forEach(function(row) {
+        const textMatch = row.innerText.toLowerCase().includes(textFilter);
+        const rowHealth = row.getAttribute('data-health');
+        
+        let statusMatch = true;
+        if (statusFilter !== 'all') {
+            if (statusFilter === 'online' && rowHealth !== 'online') statusMatch = false;
+            if (statusFilter === 'error' && rowHealth !== 'error') statusMatch = false;
+            if (statusFilter === 'incomplete' && rowHealth !== 'incomplete') statusMatch = false;
+        }
+
+        row.style.display = (textMatch && statusMatch) ? '' : 'none';
+    });
+}
+
+document.addEventListener("DOMContentLoaded", function() {
+    // 1. Inicializar contadores
+    updateFilterCounts();
+
+    // 2. Escuchar teclado en buscador
+    const searchInput = document.getElementById('searchChannelInput');
+    if (searchInput) searchInput.addEventListener('keyup', filterTable);
+
+    // 3. Escuchar clics en los botones de filtro
+    document.querySelectorAll('.channel-filter').forEach(radio => {
+        radio.addEventListener('change', filterTable);
+    });
+});
+
+// --- Función de Ordenamiento por Columnas (Mantenida) ---
+function sortTable(n, type) {
+    var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
+    table = document.getElementById("channelsTable");
+    switching = true;
+    dir = "asc"; 
+    while (switching) {
+        switching = false;
+        rows = table.rows;
+        for (i = 1; i < (rows.length - 1); i++) {
+            shouldSwitch = false;
+            x = rows[i].getElementsByTagName("TD")[n];
+            y = rows[i + 1].getElementsByTagName("TD")[n];
+            
+            let valX = type === 'num' ? parseInt(x.innerText.replace('#','').trim()) || 0 : x.innerText.toLowerCase().trim();
+            let valY = type === 'num' ? parseInt(y.innerText.replace('#','').trim()) || 0 : y.innerText.toLowerCase().trim();
+            
+            if (dir == "asc") {
+                if (valX > valY) { shouldSwitch = true; break; }
+            } else if (dir == "desc") {
+                if (valX < valY) { shouldSwitch = true; break; }
+            }
+        }
+        if (shouldSwitch) {
+            rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
+            switching = true;
+            switchcount ++;
+        } else {
+            if (switchcount == 0 && dir == "asc") {
+                dir = "desc";
+                switching = true;
+            }
+        }
+    }
+}
+</script>
+{% endblock %}

@@ -1,0 +1,740 @@
+{% extends "base.html" %} 
+ 
+{% block content %}
+<style>
+    /* Estilos personalizados para darle look SaaS profesional */
+    .custom-tabs .nav-link {
+        color: #495057 !important;
+        background-color: #f8f9fa;
+        border: 1px solid #dee2e6;
+        font-weight: 600;
+        border-radius: 8px;
+        padding: 10px 20px;
+        margin-right: 10px;
+        transition: all 0.3s ease;
+    }
+    .custom-tabs .nav-link:hover {
+        background-color: #e9ecef !important;
+    }
+    .custom-tabs .nav-link.active {
+        background-color: #ffc107 !important; /* Amarillo MundoGo */
+        color: #000000 !important; /* Texto negro forzado */
+        border-color: #ffc107 !important;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    }
+    
+    /* SCROLL INTERNO Y CABECERAS FIJAS */
+    .table-card {
+        border-radius: 12px;
+        overflow: hidden;
+        border: 1px solid #e9ecef;
+        box-shadow: 0 0.5rem 1rem rgba(0, 0, 0, 0.05);
+        background: #fff;
+    }
+    .table-container {
+        max-height: 65vh; 
+        overflow-y: auto;
+        overflow-x: auto;
+    }
+    .table-container thead th {
+        position: sticky;
+        top: 0;
+        z-index: 10;
+        box-shadow: 0 2px 2px -1px rgba(0, 0, 0, 0.1); 
+    }
+
+    /* BORDES LATERALES DE ESTADO */
+    .status-border-running { border-left: 4px solid #198754 !important; }
+    .status-border-error { border-left: 4px solid #dc3545 !important; }
+    .status-border-stopped { border-left: 4px solid #6c757d !important; }
+    .status-border-starting { border-left: 4px solid #0dcaf0 !important; }
+    .status-border-failover { border-left: 4px solid #fd7e14 !important; }
+
+    .table-hover tbody tr:hover {
+        background-color: #f8f9fc;
+    }
+    .control-btn-group .btn {
+        border-radius: 0;
+    }
+    .control-btn-group .btn:first-child {
+        border-top-left-radius: 6px;
+        border-bottom-left-radius: 6px;
+    }
+    .control-btn-group .btn:last-child {
+        border-top-right-radius: 6px;
+        border-bottom-right-radius: 6px;
+    }
+    
+    /* Estilos para los filtros rápidos */
+    .quick-filters .btn { border-radius: 20px; font-size: 0.85rem; font-weight: bold; }
+    .quick-filters .badge { font-size: 0.75rem; vertical-align: middle; }
+</style>
+
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h3 class="fw-bold"><i class="fas fa-cogs text-warning me-2"></i>MundoGo-Plus Operaciones</h3>
+        <p class="text-muted mb-0 small">Monitor y Orquestación de Flujos de Video</p>
+    </div>
+    
+    <div class="d-flex gap-3 align-items-center">
+        <div class="input-group shadow-sm" style="border-radius: 8px; overflow: hidden; width: auto; min-width: 140px;">
+            <span class="input-group-text bg-white border-0" title="Control de actualización automática">
+                <i id="refreshIcon" class="fas fa-sync-alt text-primary fa-spin"></i>
+            </span>
+            <select id="refreshRate" class="form-select border-0 bg-white fw-bold text-secondary" style="cursor: pointer; box-shadow: none;">
+                <option value="pause">Pausado</option>
+                <option value="5000">5 seg</option>
+                <option value="10000" selected>10 seg</option>
+                <option value="15000">15 seg</option>
+                <option value="30000">30 seg</option>
+            </select>
+        </div>
+
+        <div class="input-group shadow-sm" style="border-radius: 8px; overflow: hidden;">
+            <span class="input-group-text bg-white border-0"><i class="fas fa-search text-muted"></i></span>
+            <input type="text" id="searchInput" class="form-control border-0 bg-white" placeholder="Buscar canal, nodo..." autocomplete="off">
+        </div>
+
+        <a href="/ui/processes/new" class="btn btn-warning fw-bold text-dark text-nowrap shadow-sm" style="border-radius: 8px;">
+            <i class="fas fa-plus me-2"></i>Crear Proceso
+        </a>
+    </div>
+</div>
+
+<div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
+    <ul class="nav nav-pills custom-tabs" id="processTabs" role="tablist">
+        <li class="nav-item" role="presentation">
+            <button class="nav-link active" id="encoders-tab" data-bs-toggle="pill" data-bs-target="#encoders" type="button" role="tab" aria-selected="true">
+                <i class="fas fa-video me-2"></i>Granja de Encoders
+            </button>
+        </li>
+        <li class="nav-item" role="presentation">
+            <button class="nav-link" id="packagers-tab" data-bs-toggle="pill" data-bs-target="#packagers" type="button" role="tab" aria-selected="false">
+                <i class="fas fa-box-open me-2"></i>Granja de Packagers (HA)
+            </button>
+        </li>
+    </ul>
+
+    <div class="btn-group quick-filters shadow-sm" role="group">
+        <input type="radio" class="btn-check status-filter" name="statusFilter" id="btnAll" value="all" autocomplete="off" checked>
+        <label class="btn btn-outline-dark px-3" for="btnAll">Todos <span class="badge bg-secondary ms-1" id="badge-all">0</span></label>
+
+        <input type="radio" class="btn-check status-filter" name="statusFilter" id="btnError" value="error" autocomplete="off">
+        <label class="btn btn-outline-danger px-3" for="btnError"><i class="fas fa-exclamation-triangle me-1"></i>Errores <span class="badge bg-danger ms-1" id="badge-error">0</span></label>
+
+        <input type="radio" class="btn-check status-filter" name="statusFilter" id="btnRunning" value="running" autocomplete="off">
+        <label class="btn btn-outline-success px-3" for="btnRunning"><i class="fas fa-play-circle me-1"></i>Activos <span class="badge bg-success ms-1" id="badge-running">0</span></label>
+        
+        <input type="radio" class="btn-check status-filter" name="statusFilter" id="btnFailover" value="failover" autocomplete="off">
+        <label class="btn btn-outline-warning text-dark px-3" for="btnFailover"><i class="fas fa-shield-alt me-1"></i>Failover <span class="badge bg-warning text-dark ms-1" id="badge-failover">0</span></label>
+
+        <input type="radio" class="btn-check status-filter" name="statusFilter" id="btnStopped" value="stopped" autocomplete="off">
+        <label class="btn btn-outline-secondary px-3" for="btnStopped"><i class="fas fa-stop-circle me-1"></i>Detenidos <span class="badge bg-secondary ms-1" id="badge-stopped">0</span></label>
+    </div>
+</div>
+
+<div class="tab-content" id="processTabsContent">
+
+    <div class="tab-pane fade show active" id="encoders" role="tabpanel">
+        <div class="card table-card">
+            <div class="table-container">
+                <table class="table table-hover align-middle mb-0" id="tableEncoders">
+                    <thead class="table-light text-secondary" style="font-size: 0.85rem; text-transform: uppercase;"> 
+                        <tr>
+                            <th class="ps-4">ID</th>
+                            <th>Canal</th>
+                            <th>Nodo (Hardware)</th>
+                            <th>Estado</th>
+                            <th>Tiempo Activo</th>
+                            <th class="text-end pe-4">Consola de Control</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for job in jobs %}
+                        {% if job.node.tipo == 'Encoder' %}
+                        <tr class="searchable-row status-border-{{ job.status|lower }}" data-status="{{ job.status|lower }}">
+                            <td class="ps-4 text-muted fw-bold">#{{ job.id }}</td>
+                            <td>
+                                <strong class="text-dark">{{ job.channel.channel_name }}</strong><br>
+                                <span class="badge bg-light text-secondary border">{{ job.channel.unique_id }}</span>
+                            </td>
+                            <td>
+                                {% if "mac" in job.node.hostname|lower %}
+                                    <i class="fab fa-apple fa-lg me-1 text-secondary"></i>
+                                {% else %}
+                                    <i class="fab fa-linux fa-lg me-1 text-primary"></i>
+                                {% endif %}
+                                <span class="fw-bold">{{ job.node.hostname }}</span>
+                            </td>
+                            <td>
+                                {% if job.status == 'running' %}
+                                    <span class="badge bg-success shadow-sm px-2 py-1"><i class="fas fa-circle me-1" style="font-size:0.6em;"></i>RUNNING</span>
+                                {% elif job.status == 'stopped' %}
+                                    <span class="badge bg-secondary shadow-sm px-2 py-1">STOPPED</span>
+                                {% elif job.status == 'error' %}
+                                    <span class="badge bg-danger shadow-sm px-2 py-1"><i class="fas fa-exclamation-triangle me-1"></i>ERROR</span>
+                                {% elif job.status == 'failover' %}
+                                    <span class="badge bg-warning text-dark shadow-sm px-2 py-1"><i class="fas fa-shield-alt me-1"></i>FAILOVER</span>
+                                {% else %}
+                                    <span class="badge bg-info text-dark shadow-sm px-2 py-1"><i class="fas fa-spinner fa-spin me-1"></i>{{ job.status|upper }}</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if job.status == 'running' or job.status == 'failover' %}
+                                    <span class="font-monospace fw-bold text-dark"><i class="far fa-clock text-secondary me-1"></i>{{ job.started_at | duration }}</span>
+                                {% else %}
+                                    <span class="text-muted small">-</span>
+                                {% endif %}
+                            </td>
+                            <td class="text-end pe-4">
+                                <div class="btn-group control-btn-group shadow-sm me-2" role="group">
+                                    <button onclick="controlJob({{ job.id }}, 'start')" class="btn btn-sm btn-success" title="Iniciar" {% if job.status == 'running' %}disabled{% endif %}><i class="fas fa-play"></i></button>
+                                    <button onclick="controlJob({{ job.id }}, 'restart')" class="btn btn-sm btn-warning" title="Reiniciar" {% if job.status != 'running' and job.status != 'failover' %}disabled{% endif %}><i class="fas fa-sync-alt"></i></button>
+                                    <button onclick="controlJob({{ job.id }}, 'stop')" class="btn btn-sm btn-danger" title="Detener" {% if job.status == 'stopped' %}disabled{% endif %}><i class="fas fa-stop"></i></button>
+                                </div>
+                                <div class="btn-group control-btn-group shadow-sm" role="group">
+                                    <button type="button" class="btn btn-sm btn-dark" onclick="openMoveModal({{ job.id }}, '{{ job.channel.channel_name }}', '{{ job.node.hostname }}', 'Encoder')" title="Mover Nodo" {% if job.status == 'running' %}disabled{% endif %}><i class="fas fa-exchange-alt"></i></button>
+                                    <button type="button" class="btn btn-sm btn-primary" onclick="loadCommandIntoModal({{ job.id }}, {{ job.channel.id }}, {{ job.node.id }}, 'Encoder', false)" data-bs-toggle="modal" data-bs-target="#editCommandModal"><i class="fas fa-pen"></i></button>
+                                    <a href="/ui/processes/logs/{{ job.id }}" class="btn btn-sm btn-info text-white" title="Ver Logs"><i class="fas fa-terminal"></i></a>
+                                    <a href="/ui/processes/delete/{{ job.id }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('¿Eliminar proceso de forma permanente?')" title="Borrar"><i class="fas fa-trash"></i></a>
+                                </div>
+                                <textarea id="raw_command_{{ job.id }}" style="display:none;">{{ job.command }}</textarea>
+                            </td>
+                        </tr>
+                        {% endif %}
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <div class="tab-pane fade" id="packagers" role="tabpanel">
+        <div class="card table-card">
+            <div class="table-container">
+                <table class="table table-hover align-middle mb-0" id="tablePackagers">
+                    <thead class="table-dark text-warning" style="font-size: 0.85rem; text-transform: uppercase;"> 
+                        <tr>
+                            <th class="ps-4">ID</th>
+                            <th>Canal</th>
+                            <th>Topología (Hardware)</th>
+                            <th>Vinculación</th> 
+                            <th>Estado</th>
+                            <th>Tiempo Activo</th>
+                            <th class="text-end pe-4">Consola de Control</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for job in jobs %}
+                        {% if job.node.tipo == 'Packager' %}
+                        <tr class="searchable-row status-border-{{ job.status|lower }}" data-status="{{ job.status|lower }}">
+                            <td class="ps-4 text-muted fw-bold">#{{ job.id }}</td>
+                            <td>
+                                <strong class="text-dark">{{ job.channel.channel_name }}</strong>
+                                
+                                {% if job.is_drm %}
+                                    <span class="badge ms-1 shadow-sm align-middle" style="background-color: #6f42c1; font-size: 0.65rem;" title="Protegido con Widevine DRM">
+                                        <i class="fas fa-lock me-1"></i>DRM
+                                    </span>
+                                {% else %}
+                                    <span class="badge bg-light text-secondary border ms-1 shadow-sm align-middle" style="font-size: 0.65rem;" title="Señal Abierta (Clear)">
+                                        <i class="fas fa-lock-open me-1"></i>Sin_DRM
+                                    </span>
+                                {% endif %}
+                                <br>
+                                <span class="badge bg-light text-secondary border mt-1">{{ job.channel.unique_id }}</span>
+                            </td>
+                            <td>
+                                <div class="d-flex align-items-center">
+                                    {% if "mac" in job.node.hostname|lower %}
+                                        <i class="fab fa-apple fa-lg me-1 text-secondary"></i>
+                                    {% else %}
+                                        <i class="fab fa-linux fa-lg me-1 text-warning"></i>
+                                    {% endif %}
+                                    <span class="fw-bold">{{ job.node.hostname }}</span>
+                                    
+                                    {% if job.ha_role == 'Principal' %}
+                                        <span class="badge bg-primary text-white ms-2 shadow-sm" style="font-size: 0.65rem;"><i class="fas fa-star me-1"></i>MAIN</span>
+                                    {% elif job.ha_role == 'Respaldo' %}
+                                        <span class="badge bg-danger text-white ms-2 shadow-sm" style="font-size: 0.65rem;"><i class="fas fa-shield-alt me-1"></i>BACKUP</span>
+                                    {% endif %}
+                                </div>
+                            </td>
+                            <td>
+                                {% if job.parent_job_id %}
+                                    <span class="badge bg-light text-dark border shadow-sm"><i class="fas fa-link text-primary me-1"></i>Enc #{{ job.parent_job_id }}</span>
+                                {% else %}
+                                    <span class="badge bg-danger shadow-sm"><i class="fas fa-exclamation-triangle me-1"></i>Huérfano</span>
+                                {% endif %}
+                            </td>
+                            <td>
+                                {% if job.status == 'running' %} <span class="badge bg-success shadow-sm px-2 py-1"><i class="fas fa-circle me-1" style="font-size:0.6em;"></i>RUNNING</span>
+                                {% elif job.status == 'stopped' %} <span class="badge bg-secondary shadow-sm px-2 py-1">STOPPED</span>
+                                {% elif job.status == 'error' %} <span class="badge bg-danger shadow-sm px-2 py-1"><i class="fas fa-exclamation-triangle me-1"></i>ERROR</span>
+                                {% elif job.status == 'failover' %} <span class="badge bg-warning text-dark shadow-sm px-2 py-1"><i class="fas fa-shield-alt me-1"></i>FAILOVER</span>
+                                {% else %} <span class="badge bg-info text-dark shadow-sm px-2 py-1"><i class="fas fa-spinner fa-spin me-1"></i>{{ job.status|upper }}</span> {% endif %}
+                            </td>
+                            <td>
+                                {% if job.status == 'running' or job.status == 'failover' %}
+                                    <span class="font-monospace fw-bold text-dark"><i class="far fa-clock text-secondary me-1"></i>{{ job.started_at | duration }}</span>
+                                {% else %} <span class="text-muted small">-</span> {% endif %}
+                            </td>
+                            <td class="text-end pe-4">
+                                <div class="btn-group control-btn-group shadow-sm me-2" role="group">
+                                    <button onclick="controlJob({{ job.id }}, 'start')" class="btn btn-sm btn-success" title="Iniciar" {% if job.status == 'running' %}disabled{% endif %}><i class="fas fa-play"></i></button>
+                                    <button onclick="controlJob({{ job.id }}, 'restart')" class="btn btn-sm btn-warning text-dark" title="Reiniciar" {% if job.status != 'running' and job.status != 'failover' %}disabled{% endif %}><i class="fas fa-sync-alt"></i></button>
+                                    <button onclick="controlJob({{ job.id }}, 'stop')" class="btn btn-sm btn-danger" title="Detener" {% if job.status == 'stopped' %}disabled{% endif %}><i class="fas fa-stop"></i></button>
+                                </div>
+                                <div class="btn-group control-btn-group shadow-sm" role="group">
+                                    <button type="button" class="btn btn-sm btn-dark" onclick="openMoveModal({{ job.id }}, '{{ job.channel.channel_name }}', '{{ job.node.hostname }}', 'Packager')" title="Mover Nodo" {% if job.status == 'running' %}disabled{% endif %}><i class="fas fa-exchange-alt"></i></button>
+                                    <button type="button" class="btn btn-sm btn-primary" onclick="loadCommandIntoModal({{ job.id }}, {{ job.channel.id }}, {{ job.node.id }}, 'Packager', {{ 'true' if job.is_drm else 'false' }})" data-bs-toggle="modal" data-bs-target="#editCommandModal"><i class="fas fa-pen"></i></button>
+                                    <a href="/ui/processes/logs/{{ job.id }}" class="btn btn-sm btn-info text-white" title="Ver Logs"><i class="fas fa-terminal"></i></a>
+                                    <a href="/ui/processes/delete/{{ job.id }}" class="btn btn-sm btn-outline-light text-danger" onclick="return confirm('¿Eliminar proceso de forma permanente?')" title="Borrar"><i class="fas fa-trash"></i></a>
+                                </div>
+                                <textarea id="raw_command_{{ job.id }}" style="display:none;">{{ job.command }}</textarea>
+                            </td>
+                        </tr>
+                        {% endif %}
+                        {% endfor %}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="editCommandModal" tabindex="-1" aria-hidden="true">
+  <div class="modal-dialog modal-lg">
+    <div class="modal-content shadow-lg border-0">
+      <form action="/ui/processes/update-command" method="post">
+        <div class="modal-header bg-dark text-white border-0">
+          <h5 class="modal-title fw-bold"><i class="fas fa-code me-2"></i>Editar Script de Ejecución</h5>
+          <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal"></button>
+        </div>
+        <div class="modal-body bg-light">
+          <input type="hidden" name="job_id" id="modal_job_id">
+          <input type="hidden" id="modal_channel_id">
+          <input type="hidden" id="modal_node_id">
+          
+          <div id="modalPackagerGenerators" class="mb-3 d-none bg-white p-3 border rounded shadow-sm">
+              <label class="form-label small fw-bold text-muted mb-2">Regenerar Script de Empaquetado:</label>
+              <div class="d-flex gap-2">
+                  <button id="modalBtnNormal" type="button" class="btn btn-sm btn-outline-info fw-bold" onclick="rebuildModalPackagerScript()">
+                     <i class="fas fa-box-open me-2"></i>Generar Script (Normal)
+                  </button>
+                  <button id="modalBtnDrm" type="button" class="btn btn-sm btn-outline-warning fw-bold text-dark" onclick="rebuildModalPackagerDrmScript()">
+                     <i class="fas fa-key me-2"></i>Generar Script (DRM)
+                  </button>
+              </div>
+              <div class="form-check form-switch mt-3 pt-2 border-top">
+                  <input class="form-check-input ms-1" type="checkbox" name="is_drm_edit" id="modal_is_drm_check">
+                  <label class="form-check-label ms-2 fw-bold" style="color: #6f42c1;" for="modal_is_drm_check">
+                      <i class="fas fa-lock me-1"></i> DRM Activo
+                  </label>
+              </div>
+          </div>
+
+          <div id="modalEncoderGenerators" class="mb-3 d-none bg-white p-3 border rounded shadow-sm border-primary">
+              <label class="form-label small fw-bold text-primary mb-2"><i class="fas fa-video me-1"></i>Regenerar Script de Transcodificación:</label>
+              <div class="d-flex gap-2">
+                  <!-- NUEVO BOTÓN MAC -->
+                  <button id="modalBtnEncoderMac" type="button" class="btn btn-sm btn-outline-dark fw-bold" onclick="rebuildModalEncoderMacScript()">
+                      <i class="fab fa-apple me-1"></i> Regenerar Script (Mac/GPU)
+                  </button>
+                  <button id="modalBtnEncoderLinux" type="button" class="btn btn-sm btn-outline-primary fw-bold" onclick="rebuildModalEncoderLinuxScript()">
+                      <i class="fab fa-linux me-1"></i> Regenerar Script (Linux/CPU)
+                  </button>
+              </div>
+              <div class="form-check form-switch mt-3 pt-2 border-top">
+                  <input class="form-check-input ms-1" type="checkbox" id="modal_encoder_subs_check">
+                  <label class="form-check-label ms-2 fw-bold text-danger small" for="modal_encoder_subs_check">
+                      <i class="fas fa-closed-captioning me-1"></i> Quemar Subtítulos (DVB)
+                  </label>
+              </div>
+          </div>
+
+          <div class="alert alert-warning border-0 shadow-sm py-2 mb-3">
+              <small><i class="fas fa-info-circle me-1"></i>Los cambios aplicarán al reiniciar el proceso.</small>
+          </div>
+          
+          <textarea class="form-control shadow-sm border-0" name="command" id="modal_command_text" rows="15" 
+                    style="font-family: 'Courier New', Courier, monospace; font-size: 0.9em; background-color: #2b2b2b; color: #f8f8f2;" 
+                    required></textarea>
+        </div>
+        <div class="modal-footer border-0 bg-light">
+          <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+          <button type="submit" class="btn btn-success fw-bold"><i class="fas fa-save me-2"></i>Guardar Cambios</button>
+        </div>
+      </form>
+    </div>
+  </div>
+</div>
+
+<div class="modal fade" id="moveJobModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+        <div class="modal-content shadow-lg border-0">
+            <form action="/orchestrator/move-job" method="post">
+                <div class="modal-header bg-warning border-0">
+                    <h5 class="modal-title text-dark fw-bold"><i class="fas fa-exchange-alt me-2"></i>Migrar Proceso de Hardware</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" name="job_id" id="move_job_id">
+                    
+                    <div class="mb-3 p-3 bg-light rounded border">
+                        <p class="mb-1 text-muted small">Canal a migrar:</p>
+                        <h5 id="move_channel_name" class="fw-bold mb-3"></h5>
+                        <p class="mb-1 text-muted small">Hardware Actual:</p>
+                        <h6 id="move_current_node" class="mb-0 text-danger fw-bold"></h6>
+                    </div>
+
+                    <div class="mb-3">
+                        <label class="form-label fw-bold">Seleccione Nuevo Hardware Destino:</label>
+                        <select class="form-select form-select-lg shadow-sm" name="new_node_id" id="move_target_node" required></select>
+                    </div>
+
+                    <div class="alert alert-info py-2 small border-0 shadow-sm">
+                        <i class="fas fa-shield-alt me-1"></i> El orquestador limpiará la configuración del hardware viejo y la desplegará en el nuevo automáticamente.
+                    </div>
+                </div>
+                <div class="modal-footer border-0">
+                    <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancelar</button>
+                    <button type="submit" class="btn btn-dark fw-bold"><i class="fas fa-rocket me-2"></i>Confirmar Migración</button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+<script id="nodes-data" type="application/json">
+[
+    {% for n in nodes %}
+    { "id": {{ n.id }}, "name": "{{ n.hostname }}", "type": "{{ n.tipo }}", "ip": "{{ n.ip_address }}" }{{ "," if not loop.last }}
+    {% endfor %}
+]
+</script>
+
+<script>
+var isEditing = false;
+
+// Evitar auto-refresh cuando hay modales abiertos
+var editModalEl = document.getElementById('editCommandModal');
+if (editModalEl) {
+    editModalEl.addEventListener('show.bs.modal', () => { isEditing = true; });
+    editModalEl.addEventListener('hidden.bs.modal', () => { isEditing = false; });
+}
+
+var moveModalEl = document.getElementById('moveJobModal');
+if (moveModalEl) {
+    moveModalEl.addEventListener('show.bs.modal', () => { isEditing = true; });
+    moveModalEl.addEventListener('hidden.bs.modal', () => { isEditing = false; });
+}
+
+// Búsqueda inteligente
+document.getElementById('searchInput').addEventListener('keyup', filterTable);
+
+// Función para actualizar los contadores de los badges basándose en la PESTAÑA ACTIVA
+function updateFilterCounts() {
+    let counts = { all: 0, error: 0, running: 0, failover: 0, stopped: 0 };
+    
+    // Obtenemos solo los procesos de la pestaña que el usuario está viendo
+    let activePane = document.querySelector('.tab-pane.active');
+    if (activePane) {
+        activePane.querySelectorAll('.searchable-row').forEach(row => {
+            let status = row.getAttribute('data-status');
+            counts.all++;
+            if (status === 'error') counts.error++;
+            else if (status === 'running' || status === 'starting') counts.running++;
+            else if (status === 'failover') counts.failover++;
+            else if (status === 'stopped') counts.stopped++;
+        });
+    }
+
+    // Actualizamos el HTML de los badges
+    document.getElementById('badge-all').innerText = counts.all;
+    document.getElementById('badge-error').innerText = counts.error;
+    document.getElementById('badge-running').innerText = counts.running;
+    document.getElementById('badge-failover').innerText = counts.failover;
+    document.getElementById('badge-stopped').innerText = counts.stopped;
+}
+
+// Filtro combinado (Buscador de texto + Botones Rápidos de Estado)
+function filterTable() {
+    const textFilter = document.getElementById('searchInput').value.toLowerCase();
+    const statusFilter = document.querySelector('input[name="statusFilter"]:checked').value;
+
+    document.querySelectorAll('.searchable-row').forEach(function(row) {
+        const textMatch = row.textContent.toLowerCase().includes(textFilter);
+        const rowStatus = row.getAttribute('data-status');
+        
+        let statusMatch = true;
+        if (statusFilter !== 'all') {
+            if (statusFilter === 'error' && rowStatus !== 'error') statusMatch = false;
+            if (statusFilter === 'running' && !['running', 'starting'].includes(rowStatus)) statusMatch = false;
+            if (statusFilter === 'failover' && rowStatus !== 'failover') statusMatch = false;
+            if (statusFilter === 'stopped' && rowStatus !== 'stopped') statusMatch = false;
+        }
+
+        row.style.display = (textMatch && statusMatch) ? '' : 'none';
+    });
+}
+
+// Guardar el filtro en sesión cuando el usuario hace clic
+document.querySelectorAll('.status-filter').forEach(radio => {
+    radio.addEventListener('change', function() {
+        sessionStorage.setItem('processStatusFilter', this.value);
+        filterTable();
+    });
+});
+
+// Control API Start/Stop
+async function controlJob(id, action) {
+    isEditing = true;
+    try {
+        document.body.style.cursor = 'wait';
+        const res = await fetch(`/orchestrator/${action}-job/${id}`, {method:'POST'});
+        if(res.ok) location.reload();
+        else {
+            isEditing = false; document.body.style.cursor = 'default';
+            try { alert('Error: ' + (await res.json()).detail); } catch(e) { alert('Error Servidor'); }
+        }
+    } catch(e) { isEditing=false; document.body.style.cursor='default'; alert('Error de Red'); }
+}
+
+function loadCommandIntoModal(jobId, channelId, nodeId, tipo, isDrm) {
+    var txt = document.getElementById('raw_command_' + jobId);
+    if(txt) {
+        document.getElementById('modal_job_id').value = jobId;
+        document.getElementById('modal_channel_id').value = channelId;
+        document.getElementById('modal_node_id').value = nodeId;
+        document.getElementById('modal_command_text').value = txt.value;
+        
+        const packagerGen = document.getElementById('modalPackagerGenerators');
+        const encoderGen = document.getElementById('modalEncoderGenerators');
+        const drmCheck = document.getElementById('modal_is_drm_check');
+        
+        if (tipo === 'Packager') {
+            packagerGen.classList.remove('d-none');
+            encoderGen.classList.add('d-none');
+            drmCheck.checked = (isDrm === true || isDrm === 'true');
+        } else if (tipo === 'Encoder') {
+            packagerGen.classList.add('d-none');
+            encoderGen.classList.remove('d-none');
+            drmCheck.checked = false;
+        } else {
+            packagerGen.classList.add('d-none');
+            encoderGen.classList.add('d-none');
+        }
+    }
+}
+
+async function rebuildModalEncoderLinuxScript() {
+    const cid = document.getElementById('modal_channel_id').value;
+    const nid = document.getElementById('modal_node_id').value;
+    const wantSubs = document.getElementById('modal_encoder_subs_check')?.checked === true;
+    const btn = document.getElementById('modalBtnEncoderLinux');
+    const originalText = btn.innerHTML;
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Generando...';
+
+    try {
+        const res = await fetch('/orchestrator/encoder-linux/build', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ 
+                channel_id: parseInt(cid), 
+                node_id: parseInt(nid), 
+                include_subtitles: wantSubs 
+            })
+        });
+        
+        const data = await res.json();
+        
+        if (!res.ok) {
+            throw new Error(data.detail || "Error desconocido en el servidor");
+        }
+        
+        document.getElementById('modal_command_text').value = data.script_multiline || '';
+        
+    } catch (e) {
+        alert("Error generando script Linux: " + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+    }
+}
+
+async function rebuildModalEncoderMacScript() {
+    const cid = document.getElementById('modal_channel_id').value;
+    const nid = document.getElementById('modal_node_id').value;
+    const wantSubs = document.getElementById('modal_encoder_subs_check')?.checked === true;
+    const btn = document.getElementById('modalBtnEncoderMac');
+    const originalText = btn.innerHTML;
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Generando...';
+
+    try {
+        const res = await fetch('/orchestrator/encoder-mac/build', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ 
+                channel_id: parseInt(cid), 
+                node_id: parseInt(nid), 
+                include_subtitles: wantSubs 
+            })
+        });
+        
+        const data = await res.json();
+        
+        if (!res.ok) {
+            throw new Error(data.detail || "Error desconocido en el servidor");
+        }
+        
+        document.getElementById('modal_command_text').value = data.script_multiline || '';
+        
+    } catch (e) {
+        alert("Error generando script Mac: " + e.message);
+    } finally {
+        btn.disabled = false;
+        btn.innerHTML = originalText;
+    }
+}
+
+async function rebuildModalPackagerScript() {
+    const cid = document.getElementById('modal_channel_id').value;
+    const nid = document.getElementById('modal_node_id').value;
+    document.getElementById('modal_is_drm_check').checked = false;
+    const res = await fetch('/orchestrator/packager/build', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ channel_id: parseInt(cid), node_id: parseInt(nid) })
+    });
+    const data = await res.json();
+    document.getElementById('modal_command_text').value = data.script_multiline;
+}
+
+async function rebuildModalPackagerDrmScript() {
+    const cid = document.getElementById('modal_channel_id').value;
+    const nid = document.getElementById('modal_node_id').value;
+    document.getElementById('modal_is_drm_check').checked = true;
+    const res = await fetch('/orchestrator/packager-drm/build', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ channel_id: parseInt(cid), node_id: parseInt(nid) })
+    });
+    const data = await res.json();
+    document.getElementById('modal_command_text').value = data.script_multiline;
+}
+
+function openMoveModal(jobId, channelName, currentNode, type) {
+    document.getElementById('move_job_id').value = jobId;
+    document.getElementById('move_channel_name').innerText = channelName;
+    document.getElementById('move_current_node').innerText = currentNode;
+
+    var allNodes = JSON.parse(document.getElementById('nodes-data').textContent);
+    var select = document.getElementById('move_target_node');
+    select.innerHTML = ""; 
+
+    var found = false;
+    allNodes.forEach(function(node) {
+        if (node.type === type && node.name !== currentNode) {
+            var option = document.createElement("option");
+            option.value = node.id;
+            option.text = node.name + " (" + node.ip + ")";
+            select.appendChild(option);
+            found = true;
+        }
+    });
+
+    if (!found) {
+        var option = document.createElement("option");
+        option.text = "No hay otros " + type + "s disponibles";
+        select.appendChild(option);
+        select.disabled = true;
+    } else {
+        select.disabled = false;
+    }
+
+    var myModal = new bootstrap.Modal(document.getElementById('moveJobModal'));
+    myModal.show();
+}
+
+// --- ARRANQUE Y MEMORIA DE ESTADOS ---
+document.addEventListener("DOMContentLoaded", function() {
+    // 1. Restaurar pestaña activa
+    let activeTabId = sessionStorage.getItem('activeProcessTab');
+    if (activeTabId) {
+        let tabButton = document.getElementById(activeTabId);
+        if (tabButton) {
+            let tab = new bootstrap.Tab(tabButton);
+            tab.show();
+        }
+    }
+    
+    // 2. Restaurar filtro de estado (Sobrevive al auto-refresh)
+    let savedStatusFilter = sessionStorage.getItem('processStatusFilter');
+    if (savedStatusFilter) {
+        let radioBtn = document.querySelector(`input[name="statusFilter"][value="${savedStatusFilter}"]`);
+        if (radioBtn) radioBtn.checked = true;
+    }
+
+    // 3. Ejecutar filtros y conteos iniciales
+    filterTable();
+    updateFilterCounts();
+
+    // 4. Recalcular contadores cuando se cambia de pestaña
+    let tabs = document.querySelectorAll('button[data-bs-toggle="pill"]');
+    tabs.forEach(t => {
+        t.addEventListener('shown.bs.tab', function(e) {
+            sessionStorage.setItem('activeProcessTab', e.target.id);
+            updateFilterCounts();
+            filterTable();
+        });
+    });
+
+    // 5. Gestión del auto-refresh
+    const savedRate = sessionStorage.getItem('processRefreshRate');
+    if (savedRate) {
+        document.getElementById('refreshRate').value = savedRate;
+    }
+    applyRefreshConfig();
+});
+
+// --- GESTIÓN DE AUTO-REFRESH CONFIGURABLE ---
+let refreshIntervalId = null;
+
+function applyRefreshConfig() {
+    const refreshSelect = document.getElementById('refreshRate');
+    const refreshIcon = document.getElementById('refreshIcon');
+    
+    if (refreshIntervalId) {
+        clearInterval(refreshIntervalId);
+        refreshIntervalId = null;
+    }
+
+    const rate = refreshSelect.value;
+    
+    if (rate === "pause") {
+        refreshIcon.classList.remove('fa-spin', 'text-primary');
+        refreshIcon.classList.add('text-danger');
+        sessionStorage.setItem('processRefreshRate', 'pause');
+    } else {
+        refreshIcon.classList.add('fa-spin', 'text-primary');
+        refreshIcon.classList.remove('text-danger');
+        sessionStorage.setItem('processRefreshRate', rate);
+        
+        refreshIntervalId = setInterval(function() {
+            var search = document.getElementById('searchInput');
+            if (!isEditing && (!search || search.value.trim() === "")) {
+                location.reload();
+            }
+        }, parseInt(rate));
+    }
+}
+
+document.getElementById('refreshRate').addEventListener('change', applyRefreshConfig);
+
+</script>
+{% endblock %}

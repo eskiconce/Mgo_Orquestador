@@ -1,0 +1,130 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="row justify-content-center">
+    <div class="col-lg-8">
+        <form action="/ui/nodes/save" method="POST">
+            {% if node %}
+            <input type="hidden" name="node_id" value="{{ node.id }}">
+            {% endif %}
+
+            <div class="card shadow-sm mb-4">
+                <div class="card-header bg-success text-white d-flex justify-content-between align-items-center">
+                    <div class="d-flex align-items-center">
+                        <h5 class="mb-0 me-3">
+                            {% if node %}Editando: {{ node.hostname }}{% else %}Nuevo Nodo{% endif %}
+                        </h5>
+                        {% if node %}
+                            {% if node.job_count > 0 %}
+                                <span class="badge bg-warning text-dark shadow-sm">
+                                    <i class="fas fa-video me-1"></i> {{ node.job_count }} Canales Activos
+                                </span>
+                            {% else %}
+                                <span class="badge bg-light text-success opacity-75">
+                                    <i class="fas fa-check me-1"></i> Sin Carga (Libre)
+                                </span>
+                            {% endif %}
+                        {% endif %}
+                    </div>
+                    <a href="/ui/nodes" class="btn btn-sm btn-outline-light">Cancelar</a>
+                </div>
+
+                <div class="card-body">
+                    <h6 class="text-success border-bottom pb-2 mb-3">Configuración del Nodo</h6>
+                    
+                    <div class="row g-3 mb-4">
+                        <div class="col-md-12">
+                            <label class="form-label fw-bold">Hostname</label>
+                            <input type="text" name="hostname" class="form-control" placeholder="Ej: mac-m4-01" 
+                                   value="{{ node.hostname if node else '' }}" required>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold">Dirección IP (Gestión/API)</label>
+                            <input type="text" name="ip_address" class="form-control" placeholder="192.168.1.X" 
+                                   value="{{ node.ip_address if node else '' }}" required>
+                            <small class="text-muted">IP donde escucha el Agente (Puerto 8000)</small>
+                        </div>
+
+                        <div class="col-md-6">
+                            <label class="form-label fw-bold text-primary">IP Interfaz Multicast</label>
+                            <input type="text" name="ip_multicast" class="form-control border-primary" placeholder="Ej: 172.16.20.X" 
+                                   value="{{ node.ip_multicast if node and node.ip_multicast else '' }}" required>
+                            <small class="text-muted">IP usada para generar tráfico UDP</small>
+                        </div>
+
+                        <div class="col-md-12">
+                            <label class="form-label fw-bold">Rol del Equipo</label>
+                            <select name="tipo" id="nodeRole" class="form-select" required>
+                                <option value="Encoder" {% if node and node.tipo == 'Encoder' %}selected{% endif %}>Encoder (Mac/GPU)</option>
+                                <option value="Packager" {% if node and node.tipo == 'Packager' %}selected{% endif %}>Packager (Linux)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div id="packagerSettings" class="p-3 mt-4 mb-3 bg-light border rounded shadow-sm" style="display: none;">
+                        <h6 class="fw-bold text-primary mb-3"><i class="fas fa-server me-1"></i>Opciones Avanzadas de Packager (HAProxy)</h6>
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold">Nombre del Nodo (HAProxy)</label>
+                                <input type="text" name="node_name" class="form-control font-monospace text-primary" placeholder="Ej: origin_1" value="{{ node.node_name if node and node.node_name else '' }}">
+                                <div class="form-text small">Identificador exacto para el archivo <b>vod.map</b></div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label small fw-bold">Nodo de Respaldo (Espejo HA)</label>
+                                <select name="backup_node_id" class="form-select">
+                                    <option value="">-- Sin Respaldo Asignado --</option>
+                                    {% for p in packagers %}
+                                        <option value="{{ p.id }}" {% if node and node.backup_node_id == p.id %}selected{% endif %}>
+                                            {{ p.hostname }} ({{ p.ip_address }})
+                                        </option>
+                                    {% endfor %}
+                                </select>
+                                <div class="form-text small">Nodo Packager que tomará los procesos en caso de fallo</div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center mt-4 p-3 bg-light rounded border">
+                        <div class="form-check form-switch mb-0">
+                            <input class="form-check-input" type="checkbox" name="enabled" value="1" id="enabledSwitch" 
+                                   {% if not node or node.enabled %}checked{% endif %}>
+                            <label class="form-check-label fw-bold" for="enabledSwitch">Nodo Habilitado para tareas</label>
+                        </div>
+                        
+                        {% if node and node.job_count > 0 %}
+                        <div class="text-danger small">
+                            <i class="fas fa-exclamation-triangle"></i> Precaución: Este nodo tiene procesos corriendo.
+                        </div>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <div class="card-footer text-end">
+                    <button type="submit" class="btn btn-success"><i class="fas fa-save me-2"></i>Guardar Cambios</button>
+                </div>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+    document.addEventListener("DOMContentLoaded", function() {
+        const roleSelect = document.getElementById("nodeRole");
+        const packagerSettings = document.getElementById("packagerSettings");
+
+        function togglePackagerSettings() {
+            if (roleSelect.value === "Packager") {
+                packagerSettings.style.display = "block";
+            } else {
+                packagerSettings.style.display = "none";
+                // Limpiamos valores si cambiamos a Encoder
+                document.querySelector('input[name="node_name"]').value = "";
+                document.querySelector('select[name="backup_node_id"]').value = "";
+            }
+        }
+
+        roleSelect.addEventListener("change", togglePackagerSettings);
+        togglePackagerSettings(); 
+    });
+</script>
+{% endblock %}
