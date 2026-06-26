@@ -136,7 +136,7 @@ def get_processes_status(db: Session = Depends(get_db), current_user: models.Use
     return results
 
 @app.get("/api/nodes/{node_id}/health")
-def get_node_health(node_id: int, db: Session = Depends(get_db)):
+async def get_node_health(node_id: int, db: Session = Depends(get_db)):
     node = db.query(models.Node).filter(models.Node.id == node_id).first()
     if not node: raise HTTPException(404, "Nodo no encontrado")
     try:
@@ -146,7 +146,7 @@ def get_node_health(node_id: int, db: Session = Depends(get_db)):
     except Exception as e: return {"status": "offline", "error": str(e)}
 
 @app.get("/orchestrator/node-health/{node_id}")
-def get_node_health_proxy(node_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+async def get_node_health_proxy(node_id: int, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     node = db.query(models.Node).filter(models.Node.id == node_id).first()
     if not node: raise HTTPException(404, "Nodo no encontrado")
     try:
