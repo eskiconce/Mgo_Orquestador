@@ -61,23 +61,34 @@
                 </li>
             </ul>
 
-            <ul class="navbar-nav ms-auto border-start ps-lg-3">
-                <li class="nav-item dropdown">
-                    <a class="nav-link dropdown-toggle text-light" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
-                        <i class="fas fa-user-circle me-1"></i> {{ user.full_name or user.username }}
-                    </a>
-                    <ul class="dropdown-menu dropdown-menu-end user-dropdown-menu" aria-labelledby="userDropdown">
-                        <li><h6 class="dropdown-header">Usuario: {{ user.username }}</h6></li>
-                        <li><hr class="dropdown-divider"></li>
-                        <li>
-                            <a class="dropdown-item text-danger fw-bold" href="/logout">
-                                <i class="fas fa-sign-out-alt me-2"></i>Cerrar Sesión
-                            </a>
-                        </li>
-                    </ul>
-                </li>
-            </ul>
-            {% endif %}
+<ul class="navbar-nav ms-auto border-start ps-lg-3">
+                    <li class="nav-item">
+                        <div class="nav-link version-info d-flex align-items-center" title="Estado de la mejora actual">
+                            <i class="fas fa-wrench me-1 text-warning"></i>
+                            <span id="version-badge" class="badge {% if version_major %}bg-danger{% else %}bg-warning{% endif %} ms-1 version-badge">
+                                {% if version_major %}v{{ version_major }}.0{% else %}v0.1{% endif %}
+                            </span>
+                            <small class="text-muted ms-2 version-label">
+                                {% if version_major %}Mejora importante{% else %}Mejora incremental{% endif %}
+                            </small>
+                        </div>
+                    </li>
+                    <li class="nav-item dropdown">
+                        <a class="nav-link dropdown-toggle text-light" href="#" id="userDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                            <i class="fas fa-user-circle me-1"></i> {{ user.full_name or user.username }}
+                        </a>
+                        <ul class="dropdown-menu dropdown-menu-end user-dropdown-menu" aria-labelledby="userDropdown">
+                            <li><h6 class="dropdown-header">Usuario: {{ user.username }}</h6></li>
+                            <li><hr class="dropdown-divider"></li>
+                            <li>
+                                <a class="dropdown-item text-danger fw-bold" href="/logout">
+                                    <i class="fas fa-sign-out-alt me-2"></i>Cerrar Sesión
+                                </a>
+                            </li>
+                        </ul>
+                    </li>
+                </ul>
+                {% endif %}
         </div>
     </div>
 </nav>
