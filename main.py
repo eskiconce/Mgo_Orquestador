@@ -10,8 +10,8 @@ from passlib.context import CryptContext
 from jose import JWTError, jwt
 from datetime import datetime, timedelta
 from typing import Optional, Union
+from contextlib import asynccontextmanager
 import httpx
-import requests
 import asyncio
 import zlib
 import base64
@@ -27,11 +27,23 @@ from services import cms_gateway
 from services import vod_service
 from utils.helpers import time_duration, sync_haproxy_map, task_delayed_action, log_monitor_event
 
-# Inicializar BD
-models.Base.metadata.create_all(bind=engine)
-logger.info("Sistema Orquestador Iniciado - Tablas de BD verificadas.")
+# --- HTTP Client Singleton ---
+http_client: httpx.AsyncClient = None
 
-app = FastAPI(title="MundoGo-Plus Orchestrator")
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    global http_client
+    # Startup: crear cliente compartido con connection pooling
+    limits = httpx.Limits(max_connections=50, max_keepalive_connections=20)
+    timeout = httpx.Timeout(connect=5.0, read=30.0, write=30.0, pool=5.0)
+    http_client = httpx.AsyncClient(limits=limits, timeout=timeout)
+    logger.info("HTTP client started with connection pooling")
+    yield
+    # Shutdown: cerrar conexiones
+    await http_client.aclose()
+    logger.info("HTTP client closed")
+
+app = FastAPI(title="MundoGo-Plus Orchestrator", lifespan=lifespan)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 templates = Jinja2Templates(directory="templates")
@@ -397,7 +409,7 @@ def delete_process(job_id: int, db: Session = Depends(get_db)):
 # ORQUESTACIÓN Y CONTROL REMOTO
 # ==========================================
 @app.post("/orchestrator/encoder/build")
-def build_encoder_script(data: dict = Body(...), db: Session = Depends(get_db)):
+async def build_encoder_script(data: dict = Body(...), db: Session = Depends(get_db)):
     channel = db.query(models.Channel).filter(models.Channel.id == int(data.get("channel_id", 0))).first()
     node = db.query(models.Node).filter(models.Node.id == int(data.get("node_id", 0))).first()
     video_codec = str(data.get("video_codec", "h264")).lower().strip()
@@ -415,9 +427,14 @@ def build_encoder_script(data: dict = Body(...), db: Session = Depends(get_db)):
     }
     if subtitles and getattr(channel, "subtitle_pid", None): payload["subtitle_pid"] = int(channel.subtitle_pid)
 
-    r = requests.post("http://172.16.223.10:8000/encoder/build", json=payload, headers={"X-API-Key": AGENT_API_KEY}, timeout=90)
-    if r.status_code != 200: raise HTTPException(status_code=r.status_code, detail="Error remoto")
-    return r.json()
+    try:
+        resp = await http_client.post("http://172.16.223.10:8000/encoder/build", json=payload, headers={"X-API-Key": AGENT_API_KEY})
+        resp.raise_for_status()
+        return resp.json()
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail="Error remoto")
+    except Exception as e:
+        raise HTTPException(status_code=502, detail=str(e))
 
 @app.post("/orchestrator/packager/build")
 def build_packager_script(data: dict = Body(...), db: Session = Depends(get_db)):
@@ -450,7 +467,7 @@ def build_encoder_mac_script(data: dict = Body(...), db: Session = Depends(get_d
     return {"status": "ok", "script_multiline": builders.generate_mac_encoder_bash(channel, node, include_subtitles=subs)}
 
 @app.post("/api/internal/trigger-failover/{channel_id}")
-def trigger_failover(channel_id: int, mode: str = "activate", db: Session = Depends(get_db)):
+async def trigger_failover(channel_id: int, mode: str = "activate", db: Session = Depends(get_db)):
     channel = db.query(models.Channel).filter(models.Channel.id == channel_id).first()
     jobs = db.query(models.EncodingJob).filter(models.EncodingJob.channel_id == channel_id, models.EncodingJob.node_id.in_(db.query(models.Node.id).filter(models.Node.tipo == 'Packager'))).all()
     for job in jobs:
@@ -460,10 +477,11 @@ def trigger_failover(channel_id: int, mode: str = "activate", db: Session = Depe
         
         compressed = base64.b64encode(zlib.compress(script_bash.encode('utf-8'))).decode('utf-8')
         prog_name = f"pkg_{channel.channel_name}_{job.id}"
-        try: requests.post(f"http://{job.node.ip_address}:8000/jobs/create", json={"job_id": job.id, "channel_name": channel.channel_name, "command": compressed, "autostart": True}, headers={"X-API-Key": AGENT_API_KEY}, timeout=15)
-        except: pass
-        try: requests.post(f"http://{job.node.ip_address}:8000/jobs/control", params={"action": "restart", "program_name": prog_name}, headers={"X-API-Key": AGENT_API_KEY}, timeout=15)
-        except: pass
+        try:
+            await http_client.post(f"http://{job.node.ip_address}:8000/jobs/create", json={"job_id": job.id, "channel_name": channel.channel_name, "command": compressed, "autostart": True}, headers={"X-API-Key": AGENT_API_KEY})
+            await http_client.post(f"http://{job.node.ip_address}:8000/jobs/control", params={"action": "restart", "program_name": prog_name}, headers={"X-API-Key": AGENT_API_KEY})
+        except Exception:
+            pass
     db.commit(); sync_haproxy_map(db)
     return {"status": "done"}
 
@@ -478,7 +496,10 @@ def start_process_manual(job_id: int, background_tasks: BackgroundTasks, db: Ses
         if response.status_code != 200: raise HTTPException(status_code=response.status_code, detail=response.text)
         job.status, job.started_at = "running", datetime.now()
     except requests.exceptions.ReadTimeout: job.status, job.started_at = "running", datetime.now()
-    except Exception as e: job.status = "error"; db.commit(); raise HTTPException(502, detail=str(e))
+    except Exception as e:
+        job.status = "error"
+        db.commit()
+        raise HTTPException(502, detail=str(e))
 
     children = []
     if job.node.tipo == 'Encoder':
@@ -491,21 +512,26 @@ def start_process_manual(job_id: int, background_tasks: BackgroundTasks, db: Ses
     return {"status": "success"}
 
 @app.post("/orchestrator/stop-job/{job_id}")
-def stop_job(job_id: int, db: Session = Depends(get_db)):
+async def stop_job(job_id: int, db: Session = Depends(get_db)):
     job = db.query(models.EncodingJob).filter(models.EncodingJob.id == job_id).first()
-    try: requests.post(f"http://{job.node.ip_address}:{AGENT_PORT}/jobs/control", params={"action": "stop", "program_name": f"{'pkg' if job.node.tipo == 'Packager' else 'channel'}_{job.channel.channel_name}_{job.id}"}, headers={"X-API-Key": AGENT_API_KEY}, timeout=5)
-    except: pass
-    job.status = "stopped"; db.commit()
+    try:
+        await http_client.post(f"http://{job.node.ip_address}:{AGENT_PORT}/jobs/control", params={"action": "stop", "program_name": f"{'pkg' if job.node.tipo == 'Packager' else 'channel'}_{job.channel.channel_name}_{job.id}"}, headers={"X-API-Key": AGENT_API_KEY})
+    except httpx.HTTPStatusError as e:
+        pass
+    job.status = "stopped"
+    db.commit()
     if job.node.tipo == 'Packager': sync_haproxy_map(db)
     return {"status": "success"}
 
 @app.post("/orchestrator/restart-job/{job_id}")
-def restart_job(job_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
+async def restart_job(job_id: int, background_tasks: BackgroundTasks, db: Session = Depends(get_db)):
     job = db.query(models.EncodingJob).filter(models.EncodingJob.id == job_id).first()
     try:
-        requests.post(f"http://{job.node.ip_address}:{AGENT_PORT}/jobs/control", params={"action": "restart", "program_name": f"{'pkg' if job.node.tipo == 'Packager' else 'channel'}_{job.channel.channel_name}_{job.id}"}, headers={"X-API-Key": AGENT_API_KEY}, timeout=10)
+        resp = await http_client.post(f"http://{job.node.ip_address}:{AGENT_PORT}/jobs/control", params={"action": "restart", "program_name": f"{'pkg' if job.node.tipo == 'Packager' else 'channel'}_{job.channel.channel_name}_{job.id}"}, headers={"X-API-Key": AGENT_API_KEY})
+        resp.raise_for_status()
         job.started_at = datetime.now()
-    except Exception as e: raise HTTPException(502, "Error de comunicación")
+    except httpx.HTTPStatusError as e:
+        raise HTTPException(status_code=e.response.status_code, detail="Error de comunicación")
     
     if job.node.tipo == 'Encoder':
         targets = [{"url": f"http://{c.node.ip_address}:{AGENT_PORT}/jobs/control", "program_name": f"pkg_{c.channel.channel_name}_{c.id}"} for c in db.query(models.EncodingJob).filter(models.EncodingJob.parent_job_id == job.id).all() if c.status != 'stopped']
