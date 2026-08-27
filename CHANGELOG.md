@@ -1,5 +1,11 @@
 # Changelog — Encoder Orchestrator
 
+## v2.8.6 (27 Aug 2026) — Fix recovery post-reinicio
+
+- Fix: crash en `process_node_thread` cuando agente devuelve formato inesperado en `/jobs/status` (lista de strings en vez de dicts) — validación defensiva en línea 705
+- Fix: NODE_UP recovery ahora detecta jobs "running"/"starting" que no existen en el agente (caso down <45s donde ghost cleanup no se ejecuta) — los marca como error y los relanza
+- Fix: `process_map` construido con validación de tipo para evitar `TypeError: string indices must be integers`
+
 ## v2.8.5 (26 Aug 2026) — Recuperación automática de canales
 
 - Fix: campo `numero_canal` → `num_canal` en `services/vod_service.py` (bug que rompía la búsqueda de canal en alertas tsmonitor)

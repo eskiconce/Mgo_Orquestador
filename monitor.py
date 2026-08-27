@@ -635,6 +635,35 @@ def process_node_thread(node_id):
                     ej for ej in recovery_jobs
                     if ej.status == "error" or ej.started_at is not None
                 ]
+
+                # RECOVERY EXTRA: si el down fue <45s, los jobs quedaron en "running" pero el agente los perdió
+                # Verificar jobs "running"/"starting" que no existen en el agente
+                running_jobs = db.query(models.EncodingJob).filter(
+                    models.EncodingJob.node_id == node.id,
+                    models.EncodingJob.status.in_(["running", "starting"])
+                ).all()
+                if running_jobs:
+                    try:
+                        resp_agent = req_session.get(f"http://{node.ip_address}:{AGENT_PORT}/jobs/status", timeout=10)
+                        if resp_agent.status_code == 200:
+                            raw = resp_agent.json()
+                            if isinstance(raw, list) and all(isinstance(p, dict) and 'name' in p for p in raw):
+                                agent_names = {p['name'].lower() for p in raw}
+                            else:
+                                agent_names = set()
+                            for rj in running_jobs:
+                                prefix = "pkg" if rj.node.tipo == 'Packager' else "channel"
+                                prog = f"{prefix}_{rj.channel.channel_name}_{rj.id}"
+                                if prog.lower() not in agent_names:
+                                    logging.warning(f"👻 GHOST POST-RESTART: {prog} en BD como 'running' pero no existe en agente — marcando error")
+                                    rj.status = "error"
+                                    rj.auto_started = False
+                                    rj.updated_at = datetime.now()
+                                    if rj not in error_jobs:
+                                        error_jobs.append(rj)
+                    except Exception as e:
+                        logging.warning(f"No se pudo verificar procesos del agente en NODE_UP: {e}")
+
                 if error_jobs:
                     logging.warning(f"🔄 RECOVERY: {len(error_jobs)} jobs en estado 'error' en {node.hostname}, intentando relanzar...")
                     for ej in error_jobs:
@@ -701,7 +730,13 @@ def process_node_thread(node_id):
             return
 
         if resp.status_code == 200:
-            real_processes = resp.json() 
+            raw = resp.json()
+            # Validar que el agente devolvió una lista de dicts (no strings ni otro formato)
+            if isinstance(raw, list) and all(isinstance(p, dict) and 'name' in p for p in raw):
+                real_processes = raw
+            else:
+                logging.warning(f"⚠️ Agente {node.hostname} devolvió formato inesperado en /jobs/status: {type(raw).__name__} — se omite sync este ciclo")
+                real_processes = []
             process_map = {p['name'].lower(): p for p in real_processes}
             db_jobs = db.query(models.EncodingJob).filter(models.EncodingJob.node_id == node.id).all()
 

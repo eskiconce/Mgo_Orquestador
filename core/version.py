@@ -3,7 +3,7 @@
 # ==========================================
 VERSION_MAJOR = 2
 VERSION_MINOR = 8
-VERSION_PATCH = 5
+VERSION_PATCH = 6
 VERSION_STRING = f"v{VERSION_MAJOR}.{VERSION_MINOR}.{VERSION_PATCH}"
 VERSION_TYPE = "major" if VERSION_MAJOR > 0 else "minor"
 

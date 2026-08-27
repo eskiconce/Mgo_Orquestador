@@ -30,3 +30,6 @@ dist/
 
 # Backups temporales de templates
 *.bak.*
+# Backups legacy
+*.V1*
+*.V1
