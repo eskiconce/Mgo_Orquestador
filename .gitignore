@@ -27,3 +27,6 @@ backup/
 # Entorno
 node_modules/
 dist/
+
+# Backups temporales de templates
+*.bak.*
