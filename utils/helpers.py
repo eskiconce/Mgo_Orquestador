@@ -1,7 +1,6 @@
 from datetime import datetime
 from sqlalchemy.orm import Session
 from fastapi import Header, HTTPException
-import requests
 import asyncio
 import httpx
 from concurrent.futures import ThreadPoolExecutor
@@ -47,7 +46,8 @@ def sync_haproxy_vod_map(db: Session):
         for haproxy_ip in HAPROXY_NODES:
             url = f"http://{haproxy_ip}:{HAPROXY_AGENT_PORT}/update-vod-map"
             try:
-                requests.post(url, json=payload, headers=headers, timeout=2)
+                with httpx.Client(timeout=2.0) as client:
+                    client.post(url, json=payload, headers=headers)
                 logger.info(f"✅ Mapa VOD sincronizado en HAProxy {haproxy_ip}")
             except Exception as e:
                 logger.warning(f"⚠️ Error sincronizando VOD en HAProxy {haproxy_ip}: {e}")
@@ -56,7 +56,8 @@ def sync_haproxy_vod_map(db: Session):
 
 def _send_to_haproxy(url, payload, headers):
     try:
-        requests.post(url, json=payload, headers=headers, timeout=2)
+        with httpx.Client(timeout=2.0) as client:
+            client.post(url, json=payload, headers=headers)
         logger.info(f"✅ Mapa de enrutamiento actualizado en HAProxy {url}")
     except Exception as e:
         logger.warning(f"⚠️ No se pudo sincronizar HAProxy en {url}: {e}")

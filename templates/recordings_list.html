@@ -63,14 +63,23 @@
                     <option value="success" {% if filters.status == 'success' %}selected{% endif %}>ÉXITO</option>
                     <option value="error" {% if filters.status == 'error' %}selected{% endif %}>ERROR</option>
                     <option value="pending" {% if filters.status == 'pending' %}selected{% endif %}>PENDIENTE</option>
+                    <option value="deleting" {% if filters.status == 'deleting' %}selected{% endif %}>BORRANDO</option>
                     <option value="deleted" {% if filters.status == 'deleted' %}selected{% endif %}>BORRADO</option>
                 </select>
             </div>
-            <div class="col-md-3">
+            <div class="col-md-2">
+                <label class="form-label small fw-bold text-muted">Bloqueo</label>
+                <select name="in_use" class="form-select">
+                    <option value="">TODOS</option>
+                    <option value="1" {% if filters.in_use == '1' %}selected{% endif %}>EN USO</option>
+                    <option value="0" {% if filters.in_use == '0' %}selected{% endif %}>LIBRE</option>
+                </select>
+            </div>
+            <div class="col-md-2">
                 <label class="form-label small fw-bold text-muted">Fecha de Creación</label>
                 <input type="date" name="fecha" class="form-control text-secondary" value="{{ filters.fecha }}">
             </div>
-            <div class="col-md-3 d-flex gap-2">
+            <div class="col-md-2 d-flex gap-2">
                 <button type="submit" class="btn btn-primary fw-bold w-100"><i class="fas fa-search me-2"></i>Filtrar</button>
                 <a href="/ui/recordings" class="btn btn-outline-secondary" title="Limpiar Filtros"><i class="fas fa-times"></i></a>
             </div>
@@ -88,6 +97,7 @@
                     <th>Canal</th>
                     <th>Nodo / Hostname</th>
                     <th>Estado</th>
+                    <th>Limpieza</th>
                     <th>Timestamps</th>
                     <th class="text-center pe-4">Bloqueo de Borrado</th>
                 </tr>
@@ -113,6 +123,8 @@
                             <span class="badge bg-success shadow-sm"><i class="fas fa-check-circle me-1"></i>ÉXITO</span>
                         {% elif rec.status == 'error' %}
                             <span class="badge bg-danger shadow-sm"><i class="fas fa-times-circle me-1"></i>ERROR</span>
+                        {% elif rec.status == 'deleting' %}
+                            <span class="badge bg-info text-dark shadow-sm"><i class="fas fa-clock me-1"></i>BORRANDO</span>
                         {% elif rec.status == 'deleted' %}
                             <span class="badge bg-secondary shadow-sm"><i class="fas fa-trash-alt me-1"></i>BORRADO</span>
                         {% else %}
@@ -121,6 +133,23 @@
                         
                         {% if rec.output_dir %}
                             <br><small class="text-muted d-inline-block text-truncate mt-1" style="max-width: 150px;" title="{{ rec.output_dir }}">{{ rec.output_dir }}</small>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if rec.retry_count and rec.retry_count > 0 %}
+                            <span class="badge bg-warning text-dark bg-opacity-25 border border-warning px-2 py-1" title="Reintentos de borrado">
+                                <i class="fas fa-redo me-1"></i> {{ rec.retry_count }}/3
+                            </span>
+                            {% if rec.last_error %}
+                                <br><small class="text-danger d-inline-block text-truncate mt-1" style="max-width: 120px;" title="{{ rec.last_error }}">{{ rec.last_error[:40] }}</small>
+                            {% endif %}
+                        {% else %}
+                            <span class="text-muted small">—</span>
+                        {% endif %}
+                        {% if rec.cleanup_started_at %}
+                            <br><small class="text-info mt-1 d-block" style="font-size: 0.7rem;" title="Orden de borrado enviada">
+                                <i class="fas fa-clock me-1"></i>{{ rec.cleanup_started_at.strftime('%d-%b %H:%M') }}
+                            </small>
                         {% endif %}
                     </td>
                     <td>
@@ -145,7 +174,7 @@
                 </tr>
                 {% else %}
                 <tr>
-                    <td colspan="7" class="text-center py-5 text-muted">
+                    <td colspan="8" class="text-center py-5 text-muted">
                         <i class="fas fa-folder-open fa-3x mb-3 text-light"></i>
                         <h5>No se encontraron grabaciones</h5>
                         <p class="small">Modifique los filtros o espere a que el CMS envíe nuevas solicitudes.</p>

@@ -57,9 +57,11 @@
             <input type="text" id="searchChannelInput" class="form-control border-0 bg-white" placeholder="Buscar canal, IP..." autocomplete="off">
         </div>
 
+        {% if user.role in ('admin', 'operator') %}
         <a href="/ui/channels/new" class="btn btn-primary text-nowrap fw-bold shadow-sm" style="border-radius: 8px;">
             <i class="fas fa-plus-circle me-2"></i>Nuevo Canal
         </a>
+        {% endif %}
     </div>
 </div>
 
@@ -174,8 +176,10 @@
                     </td>
                     
                     <td class="text-end pe-4">
+                        {% if user.role in ('admin', 'operator') %}
                         <a href="/ui/channels/edit/{{ c.id }}" class="btn btn-sm btn-outline-primary shadow-sm" title="Editar Canal"><i class="fas fa-edit"></i> Editar</a>
                         <a href="/ui/channels/delete/{{ c.id }}" class="btn btn-sm btn-outline-danger shadow-sm ms-1" onclick="return confirm('Peligro: ¿Desea borrar este canal del inventario?')" title="Eliminar"><i class="fas fa-trash"></i></a>
+                        {% endif %}
                     </td>
                 </tr>
                 {% else %}

@@ -20,8 +20,9 @@ def crear_admin():
         return
 
     # Crear
+    role = input("Rol (admin/operator/viewer) [operator]: ") or "operator"
     hashed = pwd_context.hash(password)
-    user = models.User(username=username, full_name=fullname, email=email, hashed_password=hashed)
+    user = models.User(username=username, full_name=fullname, email=email, hashed_password=hashed, role=role)
     
     db.add(user)
     db.commit()

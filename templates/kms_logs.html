@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container-fluid p-0">
+    <div class="row mb-4 align-items-center">
+        <div class="col">
+            <h2 class="fw-bold"><i class="fas fa-terminal text-info me-2"></i>Logs del KMS</h2>
+            <p class="text-muted">Actividad reciente del servidor KMS.</p>
+        </div>
+        <div class="col-auto">
+            <button class="btn btn-outline-primary" onclick="loadLogs()"><i class="fas fa-sync me-1"></i>Recargar</button>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm">
+        <div class="card-header bg-white py-2 d-flex align-items-center border-bottom">
+            <select id="log-lines" class="form-select form-select-sm w-auto" onchange="loadLogs()">
+                <option value="50">50 lineas</option>
+                <option value="100" selected>100 lineas</option>
+                <option value="500">500 lineas</option>
+                <option value="1000">1000 lineas</option>
+            </select>
+            <small class="text-muted ms-2" id="log-info"></small>
+        </div>
+        <div class="card-body p-0">
+            <pre id="log-content" class="mb-0 p-3" style="max-height:600px;overflow-y:auto;font-size:0.8rem;background:#1e1e1e;color:#d4d4d4;border-radius:0;"></pre>
+        </div>
+    </div>
+</div>
+
+<script>
+async function loadLogs() {
+    const lines = document.getElementById('log-lines').value;
+    const pre = document.getElementById('log-content');
+    const info = document.getElementById('log-info');
+    pre.innerText = 'Cargando...';
+    try {
+        const r = await fetch(`/api/kms-proxy/api/logs?lines=${lines}`);
+        const d = await r.json();
+        pre.innerText = d.content || '(sin contenido)';
+        info.innerText = `${d.lines} lineas (total ${d.total_lines || '?'})`;
+    } catch(e) {
+        pre.innerText = 'Error cargando logs. KMS no responde.';
+        info.innerText = 'Offline';
+    }
+}
+loadLogs();
+</script>
+{% endblock %}

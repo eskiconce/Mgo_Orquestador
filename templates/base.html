@@ -44,9 +44,11 @@
                 <li class="nav-item">
                     <a class="nav-link" href="/ui/channels"><i class="fas fa-list me-1"></i> Canales</a>
                 </li>
+                {% if user.role in ('admin', 'operator') %}
                 <li class="nav-item">
                     <a class="nav-link" href="/ui/nodes"><i class="fas fa-server me-1"></i> Nodos</a>
                 </li>
+                {% endif %}
                 <li class="nav-item">
                     <a class="nav-link" href="/ui/processes"><i class="fas fa-cogs me-1"></i> Procesos</a>
                 </li>
@@ -59,17 +61,35 @@
                 <li class="nav-item">
                     <a class="nav-link" href="/ui/monitor-logs"><i class="fas fa-heartbeat me-1"></i> Monitor.Log </a>
                 </li>
+                {% if user.role in ('admin', 'operator') %}
+                <li class="nav-item">
+                    <a class="nav-link" href="/ui/users"><i class="fas fa-users-cog me-1"></i> Usuarios</a>
+                </li>
+                <li class="nav-item dropdown">
+                    <a class="nav-link dropdown-toggle" href="#" id="kmsDropdown" role="button" data-bs-toggle="dropdown" aria-expanded="false">
+                        <i class="fas fa-key me-1"></i> KMS
+                    </a>
+                    <ul class="dropdown-menu">
+                        <li><h6 class="dropdown-header"><i class="fas fa-cog me-1"></i>KMS Management</h6></li>
+                        <li><a class="dropdown-item" href="/ui/kms"><i class="fas fa-tachometer-alt me-2"></i>Dashboard</a></li>
+                        <li><a class="dropdown-item" href="/ui/kms/users"><i class="fas fa-users me-2"></i>Usuarios VIP</a></li>
+                        <li><a class="dropdown-item" href="/ui/kms/keys"><i class="fas fa-key me-2"></i>Claves</a></li>
+                        <li><hr class="dropdown-divider"></li>
+                        <li><a class="dropdown-item" href="/ui/kms/logs"><i class="fas fa-terminal me-2"></i>Logs</a></li>
+                    </ul>
+                </li>
+                {% endif %}
             </ul>
 
 <ul class="navbar-nav ms-auto border-start ps-lg-3">
                     <li class="nav-item">
-                        <div class="nav-link version-info d-flex align-items-center" title="Estado de la mejora actual">
-                            <i class="fas fa-wrench me-1 text-warning"></i>
-                            <span id="version-badge" class="badge {% if version_major %}bg-danger{% else %}bg-warning{% endif %} ms-1 version-badge">
-                                {% if version_major %}v{{ version_major }}.0{% else %}v0.1{% endif %}
+                        <div class="nav-link version-info d-flex align-items-center" title="Versión actual del orquestador">
+                            <i class="fas fa-code-branch me-1 text-info"></i>
+                            <span id="version-badge" class="badge {% if version_type == 'major' %}bg-danger{% else %}bg-warning text-dark{% endif %} ms-1 version-badge">
+                                {{ version_string }}
                             </span>
                             <small class="text-muted ms-2 version-label">
-                                {% if version_major %}Mejora importante{% else %}Mejora incremental{% endif %}
+                                {% if version_type == 'major' %}Mejora importante{% else %}Mejora incremental{% endif %}
                             </small>
                         </div>
                     </li>
@@ -79,6 +99,7 @@
                         </a>
                         <ul class="dropdown-menu dropdown-menu-end user-dropdown-menu" aria-labelledby="userDropdown">
                             <li><h6 class="dropdown-header">Usuario: {{ user.username }}</h6></li>
+                            <li><span class="dropdown-item-text"><small class="text-muted">Rol: {{ user.role }}</small></span></li>
                             <li><hr class="dropdown-divider"></li>
                             <li>
                                 <a class="dropdown-item text-danger fw-bold" href="/logout">

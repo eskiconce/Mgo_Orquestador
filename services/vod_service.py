@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, Body
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from pydantic import BaseModel
-import requests
+import httpx
+import atexit
 import models
 from database import get_db
 from core.config import AGENT_API_KEY, CMS_REAL_WEBHOOK, ORCHESTRATOR_WEBHOOK_URL, VOD_API_PORT
@@ -15,26 +16,54 @@ from sqlalchemy import or_, and_
 
 router = APIRouter()
 
+# HTTP sync client con connection pooling
+_http = httpx.Client(
+    limits=httpx.Limits(max_connections=50, max_keepalive_connections=20),
+    timeout=httpx.Timeout(connect=5.0, read=30.0, write=30.0, pool=5.0)
+)
+atexit.register(_http.close)
+
+MAX_RETRY = 3
+
 # ==========================================
 # WEBHOOK VOD (RECEPCIÓN DEL ESTADO DE GRABACIONES)
 # ==========================================
 @router.post("/api/internal/vod-webhook")
-def receive_vod_webhook(payload: dict = Body(...), db: Session = Depends(get_db)):
+def receive_vod_webhook(
+    request: Request,
+    payload: dict = Body(...),
+    db: Session = Depends(get_db)
+):
+    api_key = request.headers.get("X-API-Key") if request.headers else None
+    if api_key and api_key != AGENT_API_KEY:
+        logger.warning(f"Webhook VOD con API key invalida desde {request.client.host}")
+
     process_id = payload.get("process_id")
-    status = payload.get("status")  
-    event = payload.get("event")    
-    
+    status = payload.get("status")
+    event = payload.get("event")
+    error_msg = payload.get("error", "")
+
     logger.info(f"Webhook VOD: ID {process_id} | Evento {event} | Estado {status}")
-    
+
     if process_id:
         record = db.query(models.Recording).filter(models.Recording.process_id == process_id).first()
         if record:
             if event in ["recording_deleted", "vod_deleted"]:
                 if status == "success":
                     record.status = "deleted"
-                    record.deleted_at = datetime.now() # <--- ¡24jun26 
+                    record.deleted_at = datetime.now()
+                    record.retry_count = 0
+                    record.last_error = None
+                    record.cleanup_started_at = None
                     db.commit()
-                    sync_haproxy_vod_map(db) 
+                    sync_haproxy_vod_map(db)
+                else:
+                    record.status = 'success'
+                    record.cleanup_started_at = None
+                    record.retry_count = (record.retry_count or 0) + 1
+                    record.last_error = error_msg or status
+                    db.commit()
+                    logger.warning(f"Error borrando {process_id} en Origin (intento {record.retry_count}/{MAX_RETRY}): {error_msg or status}")
             else:
                 record.status = status
                 finished_at_str = payload.get("finished_at")
@@ -43,7 +72,7 @@ def receive_vod_webhook(payload: dict = Body(...), db: Session = Depends(get_db)
                         record.finished_at = datetime.fromisoformat(finished_at_str)
                     except ValueError as e:
                         logger.warning(f"Error parseando finished_at '{finished_at_str}': {e}")
-                
+
                 db.commit()
                 if status == "success":
                     sync_haproxy_vod_map(db)
@@ -51,7 +80,7 @@ def receive_vod_webhook(payload: dict = Body(...), db: Session = Depends(get_db)
     # Reenviar webhook final al CMS
     try:
         logger.info(f"Reenviando webhook final al CMS: {CMS_REAL_WEBHOOK}")
-        respuesta_cms = requests.post(CMS_REAL_WEBHOOK, json=payload, timeout=5)
+        respuesta_cms = _http.post(CMS_REAL_WEBHOOK, json=payload, timeout=5)
         if respuesta_cms.status_code in [200, 201, 204]:
             logger.info(f"✅ CMS confirmó recepción correctamente (Status {respuesta_cms.status_code})")
         else:
@@ -155,7 +184,7 @@ def receive_remote_logs(
 #             headers = {"X-API-Key": AGENT_API_KEY} 
 
 #             try:
-#                 requests.post(delete_url, json=payload, headers=headers, timeout=5)
+#                 _http.post(delete_url, json=payload, headers=headers, timeout=5)
 #                 deleted_count += 1
 #                 logger.info(f"Orden de borrado enviada a {origin_ip} para proceso {record.process_id}")
 #             except Exception as e:
@@ -218,7 +247,7 @@ def receive_remote_logs(
 #         headers = {"X-API-Key": AGENT_API_KEY} 
 
 #         try:
-#             requests.post(delete_url, json=payload, headers=headers, timeout=5)
+#             _http.post(delete_url, json=payload, headers=headers, timeout=5)
 #             deleted_count += 1
 #             logger.info(f"Orden de borrado enviada a {origin_ip} para proceso {record.process_id}")
 #         except Exception as e:
@@ -232,11 +261,12 @@ def receive_remote_logs(
 # ==========================================
 @router.post("/api/internal/cleanup-vod")
 def cleanup_old_vods(db: Session = Depends(get_db)):
-    """Basurero Inteligente optimizado por SQL."""
+    """Basurero Inteligente con estado intermedio 'deleting' y timeout 1h."""
     now = datetime.now()
-    cutoff_7_days = now - timedelta(days=7)
+    cutoff_8_days = now - timedelta(days=8)
     cutoff_31_days = now - timedelta(days=31)
     cutoff_90_days = now - timedelta(days=90)
+    stale_lock = now - timedelta(hours=1)
     
     # 1. LIMPIEZA DE LOGS DEL SISTEMA (> 3 MESES)
     try:
@@ -247,19 +277,28 @@ def cleanup_old_vods(db: Session = Depends(get_db)):
     except Exception as e:
         logger.error(f"Error rotando logs del sistema: {e}")
 
-    # 2. LIMPIEZA DE CARPETAS VOD (Optimizado con deleted_at)
-    deleted_count = 0
+    # 2. RECUPERAR REGISTROS STUCK (cleanup_started_at > 1h sin callback)
+    stuck_deleting = db.query(models.Recording).filter(
+        models.Recording.status == 'deleting',
+        models.Recording.cleanup_started_at <= stale_lock
+    ).all()
+    for s in stuck_deleting:
+        logger.warning(f"Recuperando registro stale en 'deleting' desde {s.cleanup_started_at}: {s.process_id}")
+        s.status = 'success'
+        s.cleanup_started_at = None
+    if stuck_deleting:
+        db.commit()
+
+    # 3. LIMPIEZA DE CARPETAS VOD
+    sent_count = 0
+    error_count = 0
     
-    # MODIFICACIÓN: Añadimos la condición de que deleted_at sea None.
-    # Así, Python solo recibirá los VODs que realmente tienen archivos físicos en el Origin.
     records_to_delete = db.query(models.Recording).filter(
         models.Recording.status == 'success',
-        models.Recording.deleted_at == None,  # <--- SEGURO DE VIDA: Ignora los ya borrados
+        models.Recording.deleted_at == None,
+        models.Recording.retry_count < MAX_RETRY,
         or_(
-            # Condición A: Más de 7 días y NO en uso
-            and_(models.Recording.created_at <= cutoff_7_days, models.Recording.in_use == False),
-            
-            # Condición B: Límite duro de 31 días para archivos bloqueados
+            and_(models.Recording.created_at <= cutoff_8_days, models.Recording.in_use == False),
             and_(models.Recording.in_use == True, models.Recording.in_use_since <= cutoff_31_days)
         )
     ).all()
@@ -269,12 +308,19 @@ def cleanup_old_vods(db: Session = Depends(get_db)):
             continue
             
         if record.in_use:
-            logger.warning(f"¡Límite duro! Forzando borrado de {record.process_id} bloqueado hace más de 31 días.")
-            
+            logger.warning(f"Límite duro: Forzando borrado de {record.process_id} bloqueado hace más de 31 días.")
+
+        retry = record.retry_count or 0
+        if retry > 0:
+            logger.info(f"Reintento {retry}/{MAX_RETRY} para {record.process_id} (ultimo error: {record.last_error})")
+
+        record.status = 'deleting'
+        record.cleanup_started_at = now
+        db.commit()
+
         origin_ip = record.node.ip_address
         delete_url = f"http://{origin_ip}:{VOD_API_PORT}/delete/"
         
-        # El payload se mantiene igual, enviamos la orden al Origin
         payload = {
             "process_id": record.process_id,
             "output_dir": record.output_dir,
@@ -284,13 +330,50 @@ def cleanup_old_vods(db: Session = Depends(get_db)):
         headers = {"X-API-Key": AGENT_API_KEY} 
 
         try:
-            requests.post(delete_url, json=payload, headers=headers, timeout=5)
-            deleted_count += 1
-            logger.info(f"Orden de borrado enviada a {origin_ip} para proceso {record.process_id}")
+            resp = _http.post(delete_url, json=payload, headers=headers, timeout=10)
+            if resp.status_code < 400:
+                sent_count += 1
+                logger.info(f"Orden de borrado enviada a {origin_ip} para {record.process_id} (status=deleting)")
+            else:
+                record.status = 'success'
+                record.cleanup_started_at = None
+                record.retry_count = retry + 1
+                record.last_error = f"HTTP {resp.status_code}"
+                db.commit()
+                error_count += 1
+                logger.error(f"Origin {origin_ip} rechazo borrado de {record.process_id}: HTTP {resp.status_code}")
         except Exception as e:
-            logger.error(f"Error pidiendo borrado a {origin_ip}: {e}")
+            record.status = 'success'
+            record.cleanup_started_at = None
+            record.retry_count = retry + 1
+            record.last_error = str(e)[:200]
+            db.commit()
+            error_count += 1
+            logger.error(f"Error pidiendo borrado a {origin_ip} para {record.process_id}: {e}")
 
-    return {"message": f"Se evaluaron registros. Se enviaron {deleted_count} órdenes de borrado."}
+    # Alertar sobre registros que excedieron max reintentos
+    stuck = db.query(models.Recording).filter(
+        models.Recording.status == 'success',
+        models.Recording.deleted_at == None,
+        models.Recording.retry_count >= MAX_RETRY
+    ).all()
+    for s in stuck:
+        logger.warning(f"MAX RETRIES ({MAX_RETRY}) alcanzado para {s.process_id} en {s.node.hostname if s.node else '?'}: {s.last_error}. Requiere intervencion manual.")
+
+    # 4. LIMPIEZA DE REGISTROS ANTIGUOS EN DB (> 90 DÍAS)
+    try:
+        old_records = db.query(models.Recording).filter(
+            models.Recording.created_at <= cutoff_90_days
+        ).delete()
+        db.commit()
+        if old_records > 0:
+            logger.info(f"Rotación de grabaciones: Se eliminaron {old_records} registros antiguos (>90 días).")
+    except Exception as e:
+        logger.error(f"Error rotando grabaciones antiguas: {e}")
+
+    return {
+        "message": f"Enviadas: {sent_count}, Errores: {error_count}, Saltados (max_retry): {len(stuck)}"
+    }
 
 
 
@@ -359,18 +442,22 @@ class TSMonitorAlert(BaseModel):
 @router.post("/api/alertas/tsmonitor")
 def receive_tsmonitor_alert(payload: TSMonitorAlert, db: Session = Depends(get_db)):
     try:
-        # 1. Buscar el Canal
-        # channel = db.query(models.Channel).filter(
-        #     (models.Channel.id == payload.num_canal) | 
-        #     (models.Channel.unique_id == str(payload.num_canal))
-        # ).first()
-
+        # 1. Buscar el Canal — por unique_id con fallback a id
         channel = db.query(models.Channel).filter(
             models.Channel.unique_id == str(payload.num_canal)
         ).first()
 
         if not channel:
-            return {"status": "error", "message": f"Canal {payload.numero_canal} no encontrado."}
+            try:
+                numeric_id = int(payload.num_canal)
+                channel = db.query(models.Channel).filter(
+                    models.Channel.id == numeric_id
+                ).first()
+            except (TypeError, ValueError):
+                channel = None
+
+        if not channel:
+            return {"status": "error", "message": f"Canal {payload.num_canal} no encontrado."}
 
         # 2. 🛠️ MAGIA: Combinar y parsear la FECHA Y HORA REALES de tsmonitor
         try:
@@ -417,7 +504,7 @@ def receive_tsmonitor_alert(payload: TSMonitorAlert, db: Session = Depends(get_d
             if encoder_job.status in ["running", "starting"]:
                 try:
                     url_stop = f"http://{agent_ip}:8000/jobs/control"
-                    requests.post(url_stop, params={"action": "stop", "program_name": prog_name}, headers=headers, timeout=5)
+                    _http.post(url_stop, params={"action": "stop", "program_name": prog_name}, headers=headers, timeout=5)
 
                     encoder_job.status = "stopped"
                     encoder_job.auto_started = False
@@ -449,7 +536,7 @@ def receive_tsmonitor_alert(payload: TSMonitorAlert, db: Session = Depends(get_d
                         "command": encoder_job.command_compress,
                         "autostart": True
                     }
-                    requests.post(url_start, json=payload_start, headers=headers, timeout=10)
+                    _http.post(url_start, json=payload_start, headers=headers, timeout=10)
 
                     encoder_job.status = "starting"
 

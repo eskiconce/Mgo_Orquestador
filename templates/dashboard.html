@@ -5,361 +5,285 @@
 
     <div class="row mb-4 align-items-center">
         <div class="col">
-            <h2 class="fw-bold"><i class="fas fa-server text-primary me-2"></i>Infraestructura</h2>
-            <p class="text-muted">Monitoreo de recursos de hardware de Encoders y Packagers.</p>
+            <h2 class="fw-bold"><i class="fas fa-tachometer-alt text-primary me-2"></i>Dashboard - Resumen de Plataforma</h2>
+            <p class="text-muted">Estado general del orquestador, servidores y canales.</p>
         </div>
         <div class="col-auto">
             <span class="badge bg-dark px-3 py-2 me-3" id="last-update">Actualizando...</span>
-            <a href="/ui/nodes/new" class="btn btn-dark"><i class="fas fa-plus me-2"></i>Agregar Nodo</a>
         </div>
     </div>
 
-    <div class="mb-2">
-        <h5 class="text-secondary fw-bold border-bottom pb-2"><i class="fas fa-film me-2"></i>Encoders (Procesamiento de Video)</h5>
-    </div>
-    
-    <div class="row g-4 mb-5">
-        {% for node in nodes if node.tipo == 'Encoder' %}
-            <div class="col-md-6 col-lg-4">
-                <div class="card shadow-sm h-100 border-0" id="card_node_{{ node.id }}">
-                    <div class="card-header bg-white d-flex justify-content-between align-items-center py-3 border-bottom-0">
-                        <div class="d-flex align-items-center">
-                            <i class="fab fa-apple fa-2x me-2 text-dark"></i>
-                            <div>
-                                <h5 class="mb-0 fw-bold">{{ node.hostname }}</h5>
-                                <small class="text-muted">{{ node.ip_address }}</small>
-                            </div>
-                        </div>
-                        <div>
-                            <span id="status_badge_{{ node.id }}" class="badge bg-secondary rounded-pill">Wait...</span>
-                        </div>
+    <div class="row g-3 mb-4">
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body d-flex align-items-center">
+                    <div class="rounded-circle bg-success bg-opacity-10 p-3 me-3">
+                        <i class="fas fa-server text-success fa-2x"></i>
                     </div>
-
-                    <div class="card-body pt-0">
-                        <div class="d-flex justify-content-between mb-3">
-                            <span class="badge bg-primary bg-opacity-10 text-primary border border-primary">
-                                <i class="fas fa-film me-1"></i> ENCODER
-                            </span>
-                            <span class="badge bg-secondary">
-                                <i class="fas fa-tasks me-1"></i> Canales: <strong class="text-white">{{ node.jobs|length }}</strong>
-                            </span>
-                        </div>
-                        <hr class="text-muted opacity-25">
-                        <div class="row g-3">
-                            <div class="col-12">
-                                <div class="d-flex justify-content-between mb-1">
-                                    <small class="fw-bold text-secondary" style="font-size: 0.75rem;">CPU</small>
-                                    <small class="fw-bold" id="cpu_text_{{ node.id }}" style="font-size: 0.75rem;">0%</small>
-                                </div>
-                                <div class="progress" style="height: 6px;">
-                                    <div id="cpu_bar_{{ node.id }}" class="progress-bar" role="progressbar" style="width: 0%; background-color: #0d6efd;"></div>
-                                </div>
-                            </div>
-                            <div class="col-12">
-                                <div class="d-flex justify-content-between mb-1">
-                                    <small class="fw-bold text-secondary" style="font-size: 0.75rem;"><i class="fas fa-bolt text-warning me-1"></i>P-Cores (Video/HW)</small>
-                                    <small class="fw-bold" id="p_cpu_text_{{ node.id }}" style="font-size: 0.75rem;">0%</small>
-                                </div>
-                                <div class="progress" style="height: 6px;">
-                                    <div id="p_cpu_bar_{{ node.id }}" class="progress-bar" role="progressbar" style="width: 0%; background-color: #6f42c1;"></div>
-                                </div>
-                            </div>
-                            <div class="col-12">
-                                <div class="d-flex justify-content-between mb-1">
-                                    <small class="fw-bold text-secondary" style="font-size: 0.75rem;">RAM</small>
-                                    <small class="fw-bold" id="ram_text_{{ node.id }}" style="font-size: 0.75rem;">0%</small>
-                                </div>
-                                <div class="progress" style="height: 6px;">
-                                    <div id="ram_bar_{{ node.id }}" class="progress-bar" role="progressbar" style="width: 0%; background-color: #ffc107;"></div>
-                                </div>
-                            </div>
-                            <div class="col-12">
-                                <div class="d-flex justify-content-between mb-1">
-                                    <small class="fw-bold text-secondary" style="font-size: 0.75rem;"><i class="fas fa-arrow-up me-1"></i>NET TX</small>
-                                    <small class="fw-bold text-success" id="net_tx_text_{{ node.id }}" style="font-size: 0.75rem;">0 Mbps</small>
-                                </div>
-                                <div class="progress" style="height: 6px;">
-                                    <div id="net_tx_bar_{{ node.id }}" class="progress-bar bg-success" role="progressbar" style="width: 0%;"></div>
-                                </div>
-                            </div>
-                            <div class="col-12">
-                                <div class="d-flex justify-content-between mb-1">
-                                    <small class="fw-bold text-secondary" style="font-size: 0.75rem;"><i class="fas fa-arrow-down me-1"></i>NET RX</small>
-                                    <small class="fw-bold text-info" id="net_rx_text_{{ node.id }}" style="font-size: 0.75rem;">0 Mbps</small>
-                                </div>
-                                <div class="progress" style="height: 6px;">
-                                    <div id="net_rx_bar_{{ node.id }}" class="progress-bar bg-info" role="progressbar" style="width: 0%;"></div>
-                                </div>
-                            </div>
-                             <div class="col-12 mt-3">
-                                <div class="bg-light p-2 rounded d-flex justify-content-between align-items-center">
-                                    <div>
-                                        <small class="text-muted d-block" style="font-size: 0.70rem;">Load Avg</small>
-                                        <span id="load_text_{{ node.id }}" class="fw-bold text-dark">-</span>
-                                    </div>
-                                    <div class="text-center">
-                                        <small class="text-muted d-block" style="font-size: 0.70rem;"><i class="fas fa-thermometer-half me-1"></i>Temp</small>
-                                        <span id="temp_text_{{ node.id }}" class="fw-bold text-danger" style="font-size: 0.85rem;">-</span>
-                                    </div>
-                                    <div class="text-end">
-                                        <small class="text-muted d-block" style="font-size: 0.70rem;"><i class="fas fa-clock me-1"></i>Uptime</small>
-                                        <span id="uptime_text_{{ node.id }}" class="fw-bold text-secondary" style="font-size: 0.85rem;">-</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="card-footer bg-light border-0 text-end">
-                        <a href="/ui/nodes/edit/{{ node.id }}" class="btn btn-sm btn-outline-secondary"><i class="fas fa-cog"></i></a>
-                        <a href="/ui/processes?node_id={{ node.id }}" class="btn btn-sm btn-outline-primary"><i class="fas fa-list"></i></a>
+                    <div>
+                        <small class="text-muted text-uppercase fw-bold">Orquestador</small>
+                        <h5 class="mb-0 fw-bold">{{ version_string }}</h5>
+                        <span class="badge bg-success mt-1"><i class="fas fa-circle me-1" style="font-size: 0.5rem;"></i> Activo</span>
                     </div>
                 </div>
             </div>
-        {% else %}
-            <div class="col-12"><p class="text-muted fst-italic ms-3">No hay Encoders activos.</p></div>
-        {% endfor %}
-    </div>
-
-    <div class="mb-2">
-        <h5 class="text-secondary fw-bold border-bottom pb-2"><i class="fas fa-box-open me-2"></i>Packagers & Storage</h5>
-    </div>
-    
-    <div class="row g-4 mb-5">
-        {% for node in nodes if node.tipo != 'Encoder' %}
-            <div class="col-md-6 col-lg-4">
-                <div class="card shadow-sm h-100 border-0" id="card_node_{{ node.id }}">
-                    <div class="card-header bg-white d-flex justify-content-between align-items-center py-3 border-bottom-0">
-                        <div class="d-flex align-items-center">
-                            <i class="fab fa-linux fa-2x me-2 text-warning"></i>
-                            <div>
-                                <h5 class="mb-0 fw-bold">{{ node.hostname }}</h5>
-                                <small class="text-muted">{{ node.ip_address }}</small>
-                            </div>
-                        </div>
-                        <div>
-                            <span id="status_badge_{{ node.id }}" class="badge bg-secondary rounded-pill">Wait...</span>
-                        </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body d-flex align-items-center">
+                    <div class="rounded-circle bg-success bg-opacity-10 p-3 me-3">
+                        <i class="fas fa-shield-alt text-success fa-2x"></i>
                     </div>
-
-                    <div class="card-body pt-0">
-                        <div class="d-flex justify-content-between mb-3">
-                            <span class="badge bg-warning bg-opacity-10 text-dark border border-warning">
-                                <i class="fas fa-box-open me-1"></i> {{ node.tipo|upper }}
-                            </span>
-                            <span class="badge bg-secondary">
-                                <i class="fas fa-tasks me-1"></i> Procesos: <strong class="text-white">{{ node.jobs|length }}</strong>
-                            </span>
-                        </div>
-                        <hr class="text-muted opacity-25">
-                        <div class="row g-3">
-                             <div class="col-12">
-                                <div class="d-flex justify-content-between mb-1">
-                                    <small class="fw-bold text-secondary" style="font-size: 0.75rem;">CPU</small>
-                                    <small class="fw-bold" id="cpu_text_{{ node.id }}" style="font-size: 0.75rem;">0%</small>
-                                </div>
-                                <div class="progress" style="height: 6px;">
-                                    <div id="cpu_bar_{{ node.id }}" class="progress-bar" role="progressbar" style="width: 0%; background-color: #0d6efd;"></div>
-                                </div>
-                            </div>
-                            <div class="col-12">
-                                <div class="d-flex justify-content-between mb-1">
-                                    <small class="fw-bold text-secondary" style="font-size: 0.75rem;">RAM</small>
-                                    <small class="fw-bold" id="ram_text_{{ node.id }}" style="font-size: 0.75rem;">0%</small>
-                                </div>
-                                <div class="progress" style="height: 6px;">
-                                    <div id="ram_bar_{{ node.id }}" class="progress-bar" role="progressbar" style="width: 0%; background-color: #ffc107;"></div>
-                                </div>
-                            </div>
-                             <div class="col-12">
-                                <div class="d-flex justify-content-between mb-1">
-                                    <small class="fw-bold text-secondary" style="font-size: 0.75rem;"><i class="fas fa-arrow-up me-1"></i>NET TX</small>
-                                    <small class="fw-bold text-success" id="net_tx_text_{{ node.id }}" style="font-size: 0.75rem;">0 Mbps</small>
-                                </div>
-                                <div class="progress" style="height: 6px;">
-                                    <div id="net_tx_bar_{{ node.id }}" class="progress-bar bg-success" role="progressbar" style="width: 0%;"></div>
-                                </div>
-                            </div>
-                            <div class="col-12">
-                                <div class="d-flex justify-content-between mb-1">
-                                    <small class="fw-bold text-secondary" style="font-size: 0.75rem;"><i class="fas fa-arrow-down me-1"></i>NET RX</small>
-                                    <small class="fw-bold text-info" id="net_rx_text_{{ node.id }}" style="font-size: 0.75rem;">0 Mbps</small>
-                                </div>
-                                <div class="progress" style="height: 6px;">
-                                    <div id="net_rx_bar_{{ node.id }}" class="progress-bar bg-info" role="progressbar" style="width: 0%;"></div>
-                                </div>
-                            </div>
-                             <div class="col-12 mt-3">
-                                <div class="bg-light p-2 rounded d-flex justify-content-between align-items-center">
-                                    <div>
-                                        <small class="text-muted d-block" style="font-size: 0.70rem;">Load Avg</small>
-                                        <span id="load_text_{{ node.id }}" class="fw-bold text-dark">-</span>
-                                    </div>
-                                    <div class="text-end">
-                                        <small class="text-muted d-block" style="font-size: 0.70rem;"><i class="fas fa-clock me-1"></i>Uptime</small>
-                                        <span id="uptime_text_{{ node.id }}" class="fw-bold text-secondary" style="font-size: 0.85rem;">-</span>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
-                    <div class="card-footer bg-light border-0 text-end">
-                        <a href="/ui/nodes/edit/{{ node.id }}" class="btn btn-sm btn-outline-secondary"><i class="fas fa-cog"></i></a>
-                        <a href="/ui/processes?node_id={{ node.id }}" class="btn btn-sm btn-outline-primary"><i class="fas fa-list"></i></a>
+                    <div>
+                        <small class="text-muted text-uppercase fw-bold">DRM</small>
+                        <h5 class="mb-0 fw-bold">{{ drm_nodes|length }}</h5>
+                        {% if drm_nodes %}
+                            {% if drm_up_count == drm_nodes|length %}
+                                <span class="badge bg-success mt-1"><i class="fas fa-check-circle me-1"></i> Todos OK</span>
+                            {% else %}
+                                <span class="badge bg-danger mt-1"><i class="fas fa-exclamation-circle me-1"></i> {{ drm_nodes|length - drm_up_count }} caído(s)</span>
+                            {% endif %}
+                            <br><small class="text-muted">{{ drm_total_users }} usuarios · {{ drm_total_devices }} dispositivos</small>
+                        {% else %}
+                            <span class="badge bg-secondary mt-1">Sin configurar</span>
+                        {% endif %}
                     </div>
                 </div>
             </div>
-        {% else %}
-            <div class="col-12"><p class="text-muted fst-italic ms-3">No hay Packagers activos.</p></div>
-        {% endfor %}
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body d-flex align-items-center">
+                    <div class="rounded-circle bg-warning bg-opacity-10 p-3 me-3">
+                        <i class="fas fa-key text-warning fa-2x"></i>
+                    </div>
+                    <div>
+                        <small class="text-muted text-uppercase fw-bold">KMS</small>
+                        <h5 class="mb-0 fw-bold">{{ kms_nodes|length }}</h5>
+                        {% if kms_nodes %}
+                            {% if kms_up_count == kms_nodes|length %}
+                                <span class="badge bg-success mt-1"><i class="fas fa-check-circle me-1"></i> Todos OK</span>
+                            {% else %}
+                                <span class="badge bg-danger mt-1"><i class="fas fa-exclamation-circle me-1"></i> {{ kms_nodes|length - kms_up_count }} caído(s)</span>
+                            {% endif %}
+                        {% else %}
+                            <span class="badge bg-secondary mt-1">Sin configurar</span>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-3">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-body d-flex align-items-center">
+                    <div class="rounded-circle bg-info bg-opacity-10 p-3 me-3">
+                        <i class="fas fa-cubes text-info fa-2x"></i>
+                    </div>
+                    <div>
+                        <small class="text-muted text-uppercase fw-bold">Servidores</small>
+                        <h5 class="mb-0 fw-bold">{{ nodes|length }}</h5>
+                        <span class="text-muted small">{{ nodes_online }} online · {{ nodes|length - nodes_online }} offline</span>
+                    </div>
+                </div>
+            </div>
+        </div>
     </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white py-2 d-flex align-items-center border-bottom">
+                    <i class="fas fa-signal text-primary me-2"></i>
+                    <h6 class="fw-bold mb-0">Canales</h6>
+                </div>
+                <div class="card-body">
+                    <div class="row g-3 text-center">
+                        <div class="col">
+                            <div class="p-3 rounded bg-light">
+                                <h3 class="fw-bold text-primary mb-0">{{ channel_statuses.total }}</h3>
+                                <small class="text-muted">Total</small>
+                            </div>
+                        </div>
+                        <div class="col">
+                            <div class="p-3 rounded bg-success bg-opacity-10">
+                                <h3 class="fw-bold text-success mb-0">{{ channel_statuses.online + channel_statuses.online_solo_encoder }}</h3>
+                                <small class="text-success">Online</small>
+                            </div>
+                        </div>
+                        <div class="col">
+                            <div class="p-3 rounded bg-warning bg-opacity-10">
+                                <h3 class="fw-bold text-warning mb-0">{{ channel_statuses.failover }}</h3>
+                                <small class="text-warning">Failover</small>
+                            </div>
+                        </div>
+                        <div class="col">
+                            <div class="p-3 rounded bg-danger bg-opacity-10">
+                                <h3 class="fw-bold text-danger mb-0">{{ channel_statuses.error }}</h3>
+                                <small class="text-danger">Error</small>
+                            </div>
+                        </div>
+                        <div class="col">
+                            <div class="p-3 rounded bg-secondary bg-opacity-10">
+                                <h3 class="fw-bold text-secondary mb-0">{{ channel_statuses.offline }}</h3>
+                                <small class="text-secondary">Offline</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-md-6">
+            <div class="card border-0 shadow-sm h-100">
+                <div class="card-header bg-white py-2 d-flex align-items-center border-bottom">
+                    <i class="fas fa-server text-secondary me-2"></i>
+                    <h6 class="fw-bold mb-0">Inventario de Servidores</h6>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Tipo</th>
+                                <th class="text-center">Total</th>
+                                <th class="text-center">Online</th>
+                                <th class="text-center">Offline</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for tipo in ['Encoder', 'Packager', 'DRM', 'KMS'] %}
+                            <tr>
+                                <td>
+                                    {% if tipo == 'Encoder' %}
+                                        <i class="fas fa-film text-primary me-2"></i>
+                                    {% elif tipo == 'Packager' %}
+                                        <i class="fas fa-box-open text-warning me-2"></i>
+                                    {% elif tipo == 'DRM' %}
+                                        <i class="fas fa-shield-alt text-success me-2"></i>
+                                    {% elif tipo == 'KMS' %}
+                                        <i class="fas fa-key text-warning me-2"></i>
+                                    {% endif %}
+                                    {{ tipo }}
+                                </td>
+                                <td class="text-center fw-bold">{{ node_summary[tipo].total }}</td>
+                                <td class="text-center">
+                                    {% if node_summary[tipo].online > 0 %}
+                                        <span class="badge bg-success">{{ node_summary[tipo].online }}</span>
+                                    {% else %}
+                                        <span class="badge bg-secondary">0</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-center">
+                                    {% if node_summary[tipo].offline > 0 %}
+                                        <span class="badge bg-danger">{{ node_summary[tipo].offline }}</span>
+                                    {% else %}
+                                        <span class="badge bg-light text-muted">0</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+        <div class="col-md-12">
+            <div class="card border-0 shadow-sm">
+                <div class="card-header bg-white py-2 d-flex align-items-center border-bottom">
+                    <i class="fas fa-tasks text-secondary me-2"></i>
+                    <h6 class="fw-bold mb-0">Procesos por Tipo</h6>
+                </div>
+                <div class="card-body p-0">
+                    <table class="table table-hover mb-0">
+                        <thead class="table-light">
+                            <tr>
+                                <th>Estado</th>
+                                <th class="text-center">Encoders</th>
+                                <th class="text-center">Packagers</th>
+                                <th class="text-center">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for estado in ['running', 'starting', 'failover', 'stopped', 'error'] %}
+                            <tr>
+                                <td>
+                                    {% if estado == 'running' %}
+                                        <span class="badge bg-success">Running</span>
+                                    {% elif estado == 'starting' %}
+                                        <span class="badge bg-info text-dark">Starting</span>
+                                    {% elif estado == 'failover' %}
+                                        <span class="badge bg-warning text-dark">Failover</span>
+                                    {% elif estado == 'stopped' %}
+                                        <span class="badge bg-secondary">Stopped</span>
+                                    {% elif estado == 'error' %}
+                                        <span class="badge bg-danger">Error</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-center fw-bold">{{ job_statuses_enc[estado] }}</td>
+                                <td class="text-center fw-bold">{{ job_statuses_pkg[estado] }}</td>
+                                <td class="text-center fw-bold">{{ job_statuses_enc[estado] + job_statuses_pkg[estado] }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white py-2 d-flex align-items-center border-bottom">
+            <i class="fas fa-history text-secondary me-2"></i>
+            <h6 class="fw-bold mb-0">Eventos Recientes</h6>
+        </div>
+        <div class="card-body p-0">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>Hora</th>
+                        <th>Tipo</th>
+                        <th>Nodo</th>
+                        <th>Mensaje</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for evt in recent_events %}
+                    <tr>
+                        <td class="small text-muted">{{ evt.timestamp.strftime('%H:%M:%S') }}</td>
+                        <td>
+                            {% if 'DOWN' in evt.event_type or 'ERROR' in evt.event_type or 'CRASH' in evt.event_type %}
+                                <span class="badge bg-danger">{{ evt.event_type }}</span>
+                            {% elif 'UP' in evt.event_type or 'OK' in evt.event_type %}
+                                <span class="badge bg-success">{{ evt.event_type }}</span>
+                            {% elif 'FAILOVER' in evt.event_type %}
+                                <span class="badge bg-warning text-dark">{{ evt.event_type }}</span>
+                            {% elif 'CLEANUP' in evt.event_type or 'SYNCED' in evt.event_type %}
+                                <span class="badge bg-info text-dark">{{ evt.event_type }}</span>
+                            {% else %}
+                                <span class="badge bg-secondary">{{ evt.event_type }}</span>
+                            {% endif %}
+                        </td>
+                        <td class="small">{{ evt.node.hostname if evt.node else '-' }}</td>
+                        <td class="small">{{ evt.message }}</td>
+                    </tr>
+                    {% else %}
+                    <tr><td colspan="4" class="text-muted fst-italic text-center">No hay eventos registrados.</td></tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    </div>
+
 </div>
 
 <script>
 document.addEventListener("DOMContentLoaded", function() {
-    const MAX_NIC_SPEED = 1000; // 1 Gbps
-    const nodeIds = [ {% for node in nodes %} {{ node.id }}, {% endfor %} ];
-
-    function formatUptime(seconds) {
-        if (!seconds || seconds < 0) return "-";
-        const days = Math.floor(seconds / (3600*24));
-        const hours = Math.floor(seconds % (3600*24) / 3600);
-        const minutes = Math.floor(seconds % 3600 / 60);
-        let result = [];
-        if (days > 0) result.push(days + "d");
-        if (hours > 0) result.push(hours + "h");
-        if (days === 0 && minutes > 0) result.push(minutes + "m");
-        if (result.length === 0) return "< 1m";
-        return result.join(" ");
-    }
-
-    async function fetchNodeHealth(nodeId) {
-        try {
-            const response = await fetch(`/orchestrator/node-health/${nodeId}`);
-            if (!response.ok) throw new Error("Error red");
-            const data = await response.json();
-            updateNodeCard(nodeId, data);
-        } catch (error) {
-            markNodeOffline(nodeId);
-        }
-    }
-
-    //
-    //function updateNodeCard(id, data) {
-    //    const badge = document.getElementById(`status_badge_${id}`);
-    //    if (data.status === 'online') {
-    //        badge.className = 'badge bg-success rounded-pill';
-    //        badge.innerHTML = '<i class="fas fa-circle me-1"></i>ONLINE';
-    //    } else {
-    //        markNodeOffline(id);
-    //        return;
-    //    }
-
-    //    const cpu = data.cpu || 0; const ram = data.ram || 0;
-    //    document.getElementById(`cpu_text_${id}`).innerText = cpu.toFixed(1) + '%';
-    //    document.getElementById(`ram_text_${id}`).innerText = ram.toFixed(1) + '%';
-    //    document.getElementById(`cpu_bar_${id}`).style.width = cpu + '%';
-    //    document.getElementById(`ram_bar_${id}`).style.width = ram + '%';
-
-    //   const loadEl = document.getElementById(`load_text_${id}`);
-    //    if(data.load_1m !== undefined && loadEl) {
-    //        loadEl.innerText = data.load_1m.toFixed(2);
-    //        loadEl.className = (data.load_1m > 8) ? "fw-bold text-danger" : "fw-bold text-dark";
-    //    }
-
-    //    const uptimeEl = document.getElementById(`uptime_text_${id}`);
-    //    if(data.uptime_seconds !== undefined && uptimeEl) uptimeEl.innerText = formatUptime(data.uptime_seconds);
-
-    //    if (data.net_tx_mbps !== undefined && data.net_rx_mbps !== undefined) {
-    //        const txVal = data.net_tx_mbps; const rxVal = data.net_rx_mbps;
-    //        document.getElementById(`net_tx_text_${id}`).innerText = txVal.toFixed(1) + " Mbps";
-    //        document.getElementById(`net_rx_text_${id}`).innerText = rxVal.toFixed(1) + " Mbps";
-    //        let txPercent = (txVal / MAX_NIC_SPEED) * 100;
-    //        let rxPercent = (rxVal / MAX_NIC_SPEED) * 100;
-    //        document.getElementById(`net_tx_bar_${id}`).style.width = Math.min(txPercent, 100) + "%";
-    //        document.getElementById(`net_rx_bar_${id}`).style.width = Math.min(rxPercent, 100) + "%";
-    //   }
-    //    document.getElementById('last-update').innerText = `Actualizado: ${new Date().toLocaleTimeString()}`;
-    // }
-    //function markNodeOffline(id) {
-    //    const badge = document.getElementById(`status_badge_${id}`);
-    //    if(badge) {
-    //        badge.className = 'badge bg-danger rounded-pill';
-    //        badge.innerHTML = '<i class="fas fa-times-circle me-1"></i>OFFLINE';
-    //    }
-    //    const resetIds = [`cpu_text_${id}`, `ram_text_${id}`, `net_tx_text_${id}`, `net_rx_text_${id}`, `uptime_text_${id}`];
-    //    resetIds.forEach(eid => { const el = document.getElementById(eid); if(el) el.innerText = '-'; });
-    //    const resetBars = [`cpu_bar_${id}`, `ram_bar_${id}`, `net_tx_bar_${id}`, `net_rx_bar_${id}`];
-    //    resetBars.forEach(eid => { const el = document.getElementById(eid); if(el) el.style.width = '0%'; });
-    // }
-
-    function updateNodeCard(id, data) {
-        const badge = document.getElementById(`status_badge_${id}`);
-        if (data.status === 'online') {
-            badge.className = 'badge bg-success rounded-pill';
-            badge.innerHTML = '<i class="fas fa-circle me-1"></i>ONLINE';
-        } else {
-            markNodeOffline(id);
-            return;
-        }
-
-        const cpu = data.cpu || 0; 
-        const p_cpu = data.p_cpu_usage || 0;  // Leemos la nueva métrica
-        const ram = data.ram || 0;
-
-        // Actualizamos textos
-        document.getElementById(`cpu_text_${id}`).innerText = cpu.toFixed(1) + '%';
-        document.getElementById(`ram_text_${id}`).innerText = ram.toFixed(1) + '%';
-        
-        // Si el nodo es Encoder y tiene la barra P-CPU, la actualizamos
-        if (document.getElementById(`p_cpu_text_${id}`)) {
-            document.getElementById(`p_cpu_text_${id}`).innerText = p_cpu.toFixed(1) + '%';
-            document.getElementById(`p_cpu_bar_${id}`).style.width = p_cpu + '%';
-        }
-
-        // Actualizamos barras
-        document.getElementById(`cpu_bar_${id}`).style.width = cpu + '%';
-        document.getElementById(`ram_bar_${id}`).style.width = ram + '%';
-
-        const loadEl = document.getElementById(`load_text_${id}`);
-        if(data.load_1m !== undefined && loadEl) {
-            loadEl.innerText = data.load_1m.toFixed(2);
-            loadEl.className = (data.load_1m > 8) ? "fw-bold text-danger" : "fw-bold text-dark";
-        }
-
-        const uptimeEl = document.getElementById(`uptime_text_${id}`);
-        if(data.uptime_seconds !== undefined && uptimeEl) uptimeEl.innerText = formatUptime(data.uptime_seconds);
-
-        if (data.net_tx_mbps !== undefined && data.net_rx_mbps !== undefined) {
-            const txVal = data.net_tx_mbps; const rxVal = data.net_rx_mbps;
-            document.getElementById(`net_tx_text_${id}`).innerText = txVal.toFixed(1) + " Mbps";
-            document.getElementById(`net_rx_text_${id}`).innerText = rxVal.toFixed(1) + " Mbps";
-            let txPercent = (txVal / MAX_NIC_SPEED) * 100;
-            let rxPercent = (rxVal / MAX_NIC_SPEED) * 100;
-            document.getElementById(`net_tx_bar_${id}`).style.width = Math.min(txPercent, 100) + "%";
-            document.getElementById(`net_rx_bar_${id}`).style.width = Math.min(rxPercent, 100) + "%";
-        }
+    function startMonitoring() {
         document.getElementById('last-update').innerText = `Actualizado: ${new Date().toLocaleTimeString()}`;
     }
-
-    function markNodeOffline(id) {
-        const badge = document.getElementById(`status_badge_${id}`);
-        if(badge) {
-            badge.className = 'badge bg-danger rounded-pill';
-            badge.innerHTML = '<i class="fas fa-times-circle me-1"></i>OFFLINE';
-        }
-        // Agregamos p_cpu a los resets
-        const resetIds = [`cpu_text_${id}`, `p_cpu_text_${id}`, `ram_text_${id}`, `net_tx_text_${id}`, `net_rx_text_${id}`, `uptime_text_${id}`];
-        resetIds.forEach(eid => { const el = document.getElementById(eid); if(el) el.innerText = '-'; });
-        const resetBars = [`cpu_bar_${id}`, `p_cpu_bar_${id}`, `ram_bar_${id}`, `net_tx_bar_${id}`, `net_rx_bar_${id}`];
-        resetBars.forEach(eid => { const el = document.getElementById(eid); if(el) el.style.width = '0%'; });
-    }
-
-    function startMonitoring() {
-        nodeIds.forEach(id => fetchNodeHealth(id));
-    }
-
     startMonitoring();
-    setInterval(startMonitoring, 3000);
+    setInterval(startMonitoring, 10000);
 });
 </script>
 {% endblock %}

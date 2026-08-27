@@ -173,7 +173,7 @@
                                         <div class="col-md-6 border-end">
                                             <h6 class="fw-bold text-muted mb-3"><i class="fas fa-video me-1"></i>Video</h6>
 
-                                            <div class="mb-3 d-none">
+                                            <div class="mb-3">
                                                 <label class="form-label small">Video Codec</label>
                                                 <select name="video_codec" class="form-select">
                                                     <option value="libx264" {% if not channel or channel.video_codec == 'libx264' %}selected{% endif %}>H.264 (libx264)</option>
@@ -183,24 +183,38 @@
 
                                             <div class="p-3 mb-3 rounded border bg-white shadow-sm">
                                                 <h6 class="fw-bold text-dark border-bottom pb-2 mb-3">
-                                                    <i class="fas fa-layer-group me-1"></i>Perfil de Transmisión
+                                                    <i class="fas fa-layer-group me-1"></i>Perfiles ABR (Alineación de Segmentos)
                                                 </h6>
                                                 
                                                 <div class="row g-3">
-                                                    <div class="col-12">
-                                                        <label class="form-label small text-primary fw-bold"><i class="fas fa-tv me-1"></i>Perfil de Video</label>
+                                                    <div class="col-md-6 border-end">
+                                                        <label class="form-label small text-primary fw-bold"><i class="fas fa-tv me-1"></i>Perfil HD (P1)</label>
                                                         <select id="profileHD" class="form-select border-primary fw-bold bg-light" style="font-size: 0.85rem;"></select>
                                                         
                                                         <div class="row g-1 mt-2">
                                                             <div class="col-6">
-                                                                <label class="form-label mb-0" style="font-size: 0.7rem;">FPS</label>
+                                                                <label class="form-label mb-0" style="font-size: 0.7rem;">FPS (P1)</label>
                                                                 <input type="text" name="fps_p1" id="fps_p1" class="form-control form-control-sm font-monospace text-center bg-white" value="{{ channel.fps_p1 if channel else '30.0' }}" readonly>
-                                                                <input type="hidden" name="fps_p2" id="fps_p2" value="{{ channel.fps_p2 if channel else '30.0' }}">
                                                             </div>
                                                             <div class="col-6">
-                                                                <label class="form-label mb-0" style="font-size: 0.7rem;">GOP</label>
+                                                                <label class="form-label mb-0" style="font-size: 0.7rem;">GOP (P1)</label>
                                                                 <input type="text" name="gop_p1" id="gop_p1" class="form-control form-control-sm font-monospace text-center bg-white" value="{{ channel.gop_p1 if channel else '60' }}" readonly>
-                                                                <input type="hidden" name="gop_p2" id="gop_p2" value="{{ channel.gop_p2 if channel else '60' }}">
+                                                            </div>
+                                                        </div>
+                                                    </div>
+
+                                                    <div class="col-md-6">
+                                                        <label class="form-label small text-secondary fw-bold"><i class="fas fa-mobile-alt me-1"></i>Perfil SD (P2)</label>
+                                                        <select id="profileSD" class="form-select border-secondary fw-bold bg-light" style="font-size: 0.85rem;"></select>
+                                                        
+                                                        <div class="row g-1 mt-2">
+                                                            <div class="col-6">
+                                                                <label class="form-label mb-0" style="font-size: 0.7rem;">FPS (P2)</label>
+                                                                <input type="text" name="fps_p2" id="fps_p2" class="form-control form-control-sm font-monospace text-center bg-white" value="{{ channel.fps_p2 if channel else '30.0' }}" readonly>
+                                                            </div>
+                                                            <div class="col-6">
+                                                                <label class="form-label mb-0" style="font-size: 0.7rem;">GOP (P2)</label>
+                                                                <input type="text" name="gop_p2" id="gop_p2" class="form-control form-control-sm font-monospace text-center bg-white" value="{{ channel.gop_p2 if channel else '60' }}" readonly>
                                                             </div>
                                                         </div>
                                                     </div>
@@ -222,7 +236,7 @@
 
                                         <div class="col-md-6">
                                             <h6 class="fw-bold text-muted mb-3"><i class="fas fa-volume-up me-1"></i>Audio</h6>
-                                            <div class="mb-3 d-none">
+                                            <div class="mb-3">
                                                 <label class="form-label small">Audio Codec</label>
                                                 <select name="audio_codec" class="form-select">
                                                     <option value="aac" {% if not channel or channel.audio_codec == 'aac' %}selected{% endif %}>AAC (MPEG-4)</option>
@@ -234,7 +248,7 @@
                                                 <label class="form-label small fw-bold text-success">Mapeo de Audio (PIDs)</label>
                                                 <div class="input-group input-group-sm">
                                                     <span class="input-group-text font-monospace"><i class="fas fa-terminal"></i></span>
-                                                    <input type="text" name="audio_mapping" id="audio_mapping" class="form-control font-monospace text-success fw-bold" placeholder="Ej: 0:a:0" value="{{ channel.audio_mapping if channel else '' }}">
+                                                    <input type="text" name="audio_mapping" id="audio_mapping" class="form-control font-monospace text-success fw-bold" placeholder="Ej: -map 0:257" value="{{ channel.audio_mapping if channel else '' }}">
                                                 </div>
                                                 <div class="form-text small">Se auto-rellena con el botón Escanear.</div>
                                             </div>
@@ -273,8 +287,8 @@
                                             <input type="number" name="port_1080p" class="form-control font-monospace fw-bold" value="{{ channel.port_1080p if channel else '3100' }}">
                                         </div>
                                         <div class="row g-1">
-                                            <div class="col-12"><input type="text" name="bitrate_p1" class="form-control form-control-sm" placeholder="Bitrate" value="{{ channel.bitrate_p1 if channel else '6000k' }}"></div>
-                                            <input type="hidden" name="bitrate_high_max" value="{{ channel.bitrate_high_max if channel else '6000k' }}">
+                                            <div class="col-6"><input type="text" name="bitrate_p1" class="form-control form-control-sm" placeholder="Avg" value="{{ channel.bitrate_p1 if channel else '6000k' }}"></div>
+                                            <div class="col-6"><input type="text" name="bitrate_high_max" class="form-control form-control-sm border-danger" placeholder="Max" value="{{ channel.bitrate_high_max if channel else '6000k' }}"></div>
                                         </div>
                                     </div>
                                 </div>
@@ -287,8 +301,8 @@
                                             <input type="number" name="port_480p" class="form-control font-monospace fw-bold" value="{{ channel.port_480p if channel else '3101' }}">
                                         </div>
                                         <div class="row g-1">
-                                            <div class="col-12"><input type="text" name="bitrate_p2" class="form-control form-control-sm" placeholder="Bitrate" value="{{ channel.bitrate_p2 if channel else '2500k' }}"></div>
-                                            <input type="hidden" name="bitrate_low_max" value="{{ channel.bitrate_low_max if channel else '2500k' }}">
+                                            <div class="col-6"><input type="text" name="bitrate_p2" class="form-control form-control-sm" placeholder="Avg" value="{{ channel.bitrate_p2 if channel else '2500k' }}"></div>
+                                            <div class="col-6"><input type="text" name="bitrate_low_max" class="form-control form-control-sm border-danger" placeholder="Max" value="{{ channel.bitrate_low_max if channel else '2500k' }}"></div>
                                         </div>
                                     </div>
                                 </div>
@@ -404,9 +418,6 @@
                         if (resolSelect) resolSelect.value = "1280x720";
                         if (bitrateAvg) bitrateAvg.value = "5000k";
                         if (bitrateMax) bitrateMax.value = "5000k";
-                    } else {
-                        if (bitrateAvg) bitrateAvg.value = "4000k";
-                        if (bitrateMax) bitrateMax.value = "4000k";
                     }
                 }
 
@@ -414,11 +425,8 @@
                 let audioIndex = 0;
                 data.streams.forEach(s => {
                     if (s.codec_type === 'audio') {
-                        audioCommandStr += `0:a:${audioIndex}`;
+                        audioCommandStr += ` -map 0:a:${audioIndex}`;
                         audioIndex++;
-                        if (audioIndex < data.streams.filter(x => x.codec_type === 'audio').length) {
-                            audioCommandStr += " ";
-                        }
                     }
                 });
                 const audioInput = document.getElementById('audio_mapping');
@@ -531,7 +539,7 @@
         const checked = document.querySelectorAll('.audio-select:checked');
         let audioParts = [];
         checked.forEach(cb => {
-            audioParts.push(`0:a:${cb.value}`);
+            audioParts.push(`-map 0:a:${cb.value}`);
         });
         if (audioParts.length) {
             document.getElementById('audio_mapping').value = audioParts.join(' ');
@@ -619,6 +627,8 @@
         };
 
         const selectHD = document.getElementById("profileHD");
+        const selectSD = document.getElementById("profileSD");
+        
         const inputFpsP1 = document.getElementById("fps_p1");
         const inputGopP1 = document.getElementById("gop_p1");
         const inputFpsP2 = document.getElementById("fps_p2");
@@ -641,18 +651,44 @@
             updateSDOptions();
         }
 
+        function updateSDOptions() {
+            const selectedHD = profiles.HD.find(p => p.id === selectHD.value);
+            if (!selectedHD) return;
+
+            selectSD.innerHTML = "";
+            const compatibleSDs = profiles.SD.filter(p => p.seg === selectedHD.seg);
+            
+            compatibleSDs.forEach(p => {
+                let opt = document.createElement("option");
+                opt.value = p.id;
+                opt.text = p.label;
+                if (p.fps == parseFloat(inputFpsP2.value) && p.gop == parseInt(inputGopP2.value)) {
+                    opt.selected = true;
+                }
+                selectSD.appendChild(opt);
+            });
+            if(selectSD.selectedIndex === -1 && selectSD.options.length > 0) selectSD.selectedIndex = 0;
+            syncInputs();
+        }
+
         function syncInputs() {
             const h = profiles.HD.find(p => p.id === selectHD.value);
+            const s = profiles.SD.find(p => p.id === selectSD.value);
             
             if(h) {
                 inputFpsP1.value = h.fps;
                 inputGopP1.value = h.gop;
-                inputFpsP2.value = h.fps;
-                inputGopP2.value = h.gop;
+                if (inputBitrateP1.value === "" || inputBitrateP1.value === "6500k") inputBitrateP1.value = "7000k";
+            }
+            if(s) {
+                inputFpsP2.value = s.fps;
+                inputGopP2.value = s.gop;
+                if (inputBitrateP2.value === "" || inputBitrateP2.value === "2800k") inputBitrateP2.value = "3000k";
             }
         }
 
-        selectHD.addEventListener("change", syncInputs);
+        selectHD.addEventListener("change", updateSDOptions);
+        selectSD.addEventListener("change", syncInputs);
 
         initHD();
     });

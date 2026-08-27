@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container-fluid p-0">
+    <div class="row mb-4 align-items-center">
+        <div class="col">
+            <h2 class="fw-bold"><i class="fas fa-users text-primary me-2"></i>Usuarios VIP</h2>
+            <p class="text-muted">Administracion de usuarios con pantallas permitidas.</p>
+        </div>
+        {% if user.role in ('admin', 'operator') %}
+        <div class="col-auto">
+            <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#userModal" onclick="newUser()"><i class="fas fa-plus me-1"></i>Nuevo VIP</button>
+        </div>
+        {% endif %}
+    </div>
+
+    <div class="card border-0 shadow-sm">
+        <div class="card-body p-0">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>User ID</th>
+                        <th>Username</th>
+                        <th>Email</th>
+                        <th class="text-center">Max Screens</th>
+                        <th class="text-center">Estado</th>
+                        <th class="text-center">Ultima Actividad</th>
+                        <th class="text-center">Acciones</th>
+                    </tr>
+                </thead>
+                <tbody id="users-tbody">
+                    <tr><td colspan="7" class="text-center text-muted">Cargando...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<div class="modal fade" id="userModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header"><h5 class="modal-title" id="modalTitle">Nuevo Usuario VIP</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button></div>
+            <div class="modal-body">
+                <input type="hidden" id="edit-user-id">
+                <div class="mb-3"><label class="form-label">User ID</label><input class="form-control" id="f-user_id"></div>
+                <div class="mb-3"><label class="form-label">Username</label><input class="form-control" id="f-username"></div>
+                <div class="mb-3"><label class="form-label">Email</label><input class="form-control" id="f-email" type="email"></div>
+                <div class="mb-3"><label class="form-label">Max Screens</label><input class="form-control" id="f-max_screens" type="number" value="1" min="1" max="10"></div>
+                <div class="mb-3" id="status-field" style="display:none"><label class="form-label">Estado</label>
+                    <select class="form-select" id="f-status">
+                        <option value="active">Activo</option>
+                        <option value="inactive">Inactivo</option>
+                    </select></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button class="btn btn-primary" onclick="saveUser()">Guardar</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+var currentUserRole = "{{ user.role }}";
+let users = [];
+
+async function loadUsers() {
+    try {
+        const r = await fetch('/api/kms-proxy/api/vip/users');
+        const d = await r.json();
+        users = d.users || [];
+        render();
+    } catch(e) { document.getElementById('users-tbody').innerHTML = '<tr><td colspan="7" class="text-danger">Error cargando</td></tr>'; }
+}
+
+function render() {
+    const canManage = currentUserRole === 'admin' || currentUserRole === 'operator';
+    const tbody = document.getElementById('users-tbody');
+    if (!users.length) { tbody.innerHTML = '<tr><td colspan="7" class="text-muted text-center">Sin usuarios registrados</td></tr>'; return; }
+    tbody.innerHTML = users.map(u => `<tr>
+        <td><code>${u.user_id}</code></td>
+        <td>${u.username || '-'}</td>
+        <td>${u.email || '-'}</td>
+        <td class="text-center fw-bold">${u.max_screens}</td>
+        <td class="text-center">${u.status === 'active' ? '<span class="badge bg-success">Activo</span>' : '<span class="badge bg-secondary">Inactivo</span>'}</td>
+        <td class="text-center small text-muted">${u.last_activity ? new Date(u.last_activity).toLocaleString() : '-'}</td>
+        <td class="text-center">
+            ${canManage ? `<button class="btn btn-sm btn-outline-primary me-1" onclick="editUser('${u.user_id}')"><i class="fas fa-edit"></i></button>
+            <button class="btn btn-sm btn-outline-danger" onclick="deleteUser('${u.user_id}')"><i class="fas fa-trash"></i></button>` : ''}
+        </td>
+    </tr>`).join('');
+}
+
+function newUser() {
+    document.getElementById('modalTitle').innerText = 'Nuevo Usuario VIP';
+    document.getElementById('edit-user-id').value = '';
+    document.getElementById('f-user_id').value = ''; document.getElementById('f-user_id').disabled = false;
+    document.getElementById('f-username').value = ''; document.getElementById('f-email').value = '';
+    document.getElementById('f-max_screens').value = 1;
+    document.getElementById('status-field').style.display = 'none';
+}
+
+async function editUser(userId) {
+    const u = users.find(x => x.user_id === userId);
+    if (!u) return;
+    document.getElementById('modalTitle').innerText = 'Editar Usuario VIP';
+    document.getElementById('edit-user-id').value = userId;
+    document.getElementById('f-user_id').value = userId; document.getElementById('f-user_id').disabled = true;
+    document.getElementById('f-username').value = u.username || '';
+    document.getElementById('f-email').value = u.email || '';
+    document.getElementById('f-max_screens').value = u.max_screens;
+    document.getElementById('f-status').value = u.status || 'active';
+    document.getElementById('status-field').style.display = 'block';
+    new bootstrap.Modal(document.getElementById('userModal')).show();
+}
+
+async function saveUser() {
+    const editId = document.getElementById('edit-user-id').value;
+    const data = {
+        user_id: document.getElementById('f-user_id').value,
+        username: document.getElementById('f-username').value,
+        email: document.getElementById('f-email').value,
+        max_screens: parseInt(document.getElementById('f-max_screens').value) || 1,
+    };
+    if (!data.user_id) return alert('User ID requerido');
+
+    try {
+        if (editId) {
+            const upd = { username: data.username, email: data.email, max_screens: data.max_screens, status: document.getElementById('f-status').value };
+            await fetch(`/api/kms-proxy/api/vip/users/${editId}`, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(upd) });
+        } else {
+            await fetch('/api/kms-proxy/api/vip/users', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
+        }
+        bootstrap.Modal.getInstance(document.getElementById('userModal')).hide();
+        loadUsers();
+    } catch(e) { alert('Error guardando: ' + e); }
+}
+
+async function deleteUser(userId) {
+    if (!confirm(`Eliminar usuario ${userId}?`)) return;
+    try {
+        await fetch(`/api/kms-proxy/api/vip/users/${userId}`, { method: 'DELETE' });
+        loadUsers();
+    } catch(e) { alert('Error eliminando: ' + e); }
+}
+
+loadUsers();
+</script>
+{% endblock %}

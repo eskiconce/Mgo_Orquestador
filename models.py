@@ -64,6 +64,9 @@ class Channel(Base):
     burn_subtitles = Column(Boolean, default=False)
     subtitle_pid = Column(Integer, nullable=True)
 
+    # --- DRM ---
+    is_drm = Column(Boolean, default=False)
+
     # --- Output ---
     multicast_ip_out = Column(String(15))
 
@@ -115,6 +118,15 @@ class Node(Base):
     backup_node_id = Column(Integer, ForeignKey("nodos.id"), nullable=True)
     backup_node = relationship("Node", remote_side="Node.id")
     # ---------------------------------------------------
+
+    # --- CAMPOS DRM ---
+    drm_total_users = Column(Integer, default=0)
+    drm_total_devices = Column(Integer, default=0)
+    drm_health_status = Column(String(20), default="unknown")  # UP/DOWN/degraded
+    drm_widevine = Column(String(10), default="unknown")
+    drm_database = Column(String(10), default="unknown")
+    drm_last_stats_at = Column(DateTime, nullable=True)
+    # -----------------
 
     jobs = relationship("EncodingJob", back_populates="node")
 
@@ -181,6 +193,7 @@ class User(Base):
     email = Column(String(100), unique=True, index=True)
     full_name = Column(String(100))
     hashed_password = Column(String(255))
+    role = Column(String(20), default="operator")  # admin, operator, viewer
     disabled = Column(Boolean, default=False)
 
 class Recording(Base):
@@ -201,6 +214,9 @@ class Recording(Base):
     # Relación con el nodo para sacar su nombre fácilmente
     node = relationship("Node")
     deleted_at = Column(DateTime, nullable=True, default=None) # 24jun26 nuevo campo
+    retry_count = Column(Integer, default=0) # 12jul26: contador de reintentos de borrado
+    last_error = Column(String(255), nullable=True) # 12jul26: ultimo error de borrado
+    cleanup_started_at = Column(DateTime, nullable=True, default=None) # 13jul26: cuando se envio orden de borrado
 
 class SystemLog(Base):
     __tablename__ = "system_logs"

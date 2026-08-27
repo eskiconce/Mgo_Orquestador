@@ -1,0 +1,69 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container-fluid p-0">
+    <div class="row mb-4 align-items-center">
+        <div class="col">
+            <h2 class="fw-bold"><i class="fas fa-key text-secondary me-2"></i>Claves de Contenido (KMS)</h2>
+            <p class="text-muted">Registro de claves DRM generadas por el KMS.</p>
+        </div>
+    </div>
+
+    <div class="row mb-3">
+        <div class="col-md-4">
+            <div class="input-group shadow-sm">
+                <span class="input-group-text bg-white"><i class="fas fa-search text-muted"></i></span>
+                <input type="text" id="filterChannel" class="form-control" placeholder="Buscar por canal..." oninput="filterKeys()">
+            </div>
+        </div>
+        <div class="col-auto">
+            <span class="badge bg-secondary fs-6 px-3 py-2" id="keyCount">0</span>
+        </div>
+    </div>
+
+    <div class="card border-0 shadow-sm">
+        <div class="card-body p-0">
+            <table class="table table-hover mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>KID</th>
+                        <th>Canal</th>
+                        <th>Creado</th>
+                    </tr>
+                </thead>
+                <tbody id="keys-tbody">
+                    <tr><td colspan="3" class="text-center text-muted">Cargando...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+let allKeys = [];
+
+async function loadKeys() {
+    try {
+        const r = await fetch('/api/kms-proxy/api/keys?limit=200');
+        const d = await r.json();
+        allKeys = d.keys || [];
+        filterKeys();
+    } catch(e) { document.getElementById('keys-tbody').innerHTML = '<tr><td colspan="3" class="text-danger">Error cargando</td></tr>'; }
+}
+
+function filterKeys() {
+    const q = document.getElementById('filterChannel').value.toLowerCase();
+    const filtered = q ? allKeys.filter(k => (k.channel_id || '').toLowerCase().includes(q)) : allKeys;
+    const tbody = document.getElementById('keys-tbody');
+    document.getElementById('keyCount').textContent = filtered.length;
+
+    if (!filtered.length) { tbody.innerHTML = '<tr><td colspan="3" class="text-center text-muted">Sin resultados</td></tr>'; return; }
+    tbody.innerHTML = filtered.map(k => `<tr>
+        <td><code class="text-primary">${k.kid}</code></td>
+        <td><strong>${k.channel_id}</strong></td>
+        <td class="small text-muted">${k.created_at ? new Date(k.created_at).toLocaleString() : '-'}</td>
+    </tr>`).join('');
+}
+
+loadKeys();
+</script>
+{% endblock %}

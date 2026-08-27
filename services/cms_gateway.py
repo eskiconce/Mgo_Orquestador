@@ -2,7 +2,8 @@ from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy.orm import Session, joinedload
 from datetime import datetime
 from pydantic import BaseModel
-import requests
+import httpx
+import atexit
 
 import models
 from database import get_db
@@ -11,6 +12,13 @@ from core.logging_service import logger
 from utils.helpers import verify_cms_token
 
 router = APIRouter()
+
+# HTTP sync client con connection pooling
+_http = httpx.Client(
+    limits=httpx.Limits(max_connections=50, max_keepalive_connections=20),
+    timeout=httpx.Timeout(connect=5.0, read=30.0, write=30.0, pool=5.0)
+)
+atexit.register(_http.close)
 
 # --- MODELOS PARA LA API DEL CMS ---
 class LockRequest(BaseModel):
@@ -136,7 +144,7 @@ def proxy_cms_record(request_data: CMSRecordRequest, db: Session = Depends(get_d
         payload = request_data.dict(exclude_unset=True)
         payload["callback_url"] = ORCHESTRATOR_WEBHOOK_URL
         headers = {"X-API-Key": AGENT_API_KEY}
-        resp = requests.post(url_vod, json=payload, headers=headers, timeout=10)
+        resp = _http.post(url_vod, json=payload, headers=headers, timeout=10)
         
         if resp.status_code not in [200, 201]:
             new_record.status = "error"
@@ -146,7 +154,7 @@ def proxy_cms_record(request_data: CMSRecordRequest, db: Session = Depends(get_d
         logger.info(f"CMS solicitó GRABACIÓN. Registrado con process_id {request_data.process_id}")
         return resp.json()
         
-    except requests.exceptions.RequestException as e:
+    except httpx.RequestError as e:
         new_record.status = "error"
         db.commit()
         raise HTTPException(status_code=502, detail=f"Error conectando con el Origin: {e}")
@@ -192,7 +200,7 @@ def proxy_cms_vod(request_data: CMSVodRequest, db: Session = Depends(get_db), ap
         payload = request_data.dict(exclude_unset=True) if hasattr(request_data, 'dict') else request_data.model_dump(exclude_unset=True)
         payload["callback_url"] = ORCHESTRATOR_WEBHOOK_URL
         headers = {"X-API-Key": AGENT_API_KEY}
-        resp = requests.post(url_vod, json=payload, headers=headers, timeout=10)
+        resp = _http.post(url_vod, json=payload, headers=headers, timeout=10)
         
         if resp.status_code not in [200, 201]:
             new_record.status = "error"
@@ -202,7 +210,7 @@ def proxy_cms_vod(request_data: CMSVodRequest, db: Session = Depends(get_db), ap
         logger.info(f"CMS solicitó VOD histórico. Registrado con process_id {request_data.process_id}")
         return resp.json()
         
-    except requests.exceptions.RequestException as e:
+    except httpx.RequestError as e:
         new_record.status = "error"
         db.commit()
         logger.error(f"Fallo comunicando con VOD API en {origin_ip}: {e}")
@@ -225,7 +233,7 @@ def proxy_cms_delete(request_data: CMSDeleteRequest, db: Session = Depends(get_d
     for node in packager_nodes:
         url_delete = f"http://{node.ip_address}:{VOD_API_PORT}/delete/"
         try:
-            requests.post(url_delete, json=payload, headers=headers, timeout=3)
+            _http.post(url_delete, json=payload, headers=headers, timeout=3)
             respuestas.append(f"Orden enviada a {node.hostname}")
         except Exception as e:
             logger.warning(f"No se pudo enviar borrado a {node.hostname} ({node.ip_address}): {e}")

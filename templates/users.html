@@ -1,0 +1,143 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-3">
+    <h3><i class="fas fa-users-cog me-2"></i>Gestión de Usuarios</h3>
+    {% if user.role == 'admin' %}
+    <button class="btn btn-success" data-bs-toggle="modal" data-bs-target="#userModal" onclick="newUser()">
+        <i class="fas fa-plus me-1"></i>Nuevo Usuario
+    </button>
+    {% endif %}
+</div>
+
+<div class="card shadow-sm border-0">
+    <div class="card-body p-0">
+        {% if error %}
+        <div class="alert alert-danger alert-dismissible fade show m-3" role="alert">
+            <i class="fas fa-exclamation-triangle me-2"></i>{{ error }}
+            <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+        </div>
+        {% endif %}
+        <table class="table table-hover mb-0">
+            <thead class="table-light">
+                <tr>
+                    <th>ID</th>
+                    <th>Username</th>
+                    <th>Nombre</th>
+                    <th>Email</th>
+                    <th>Rol</th>
+                    <th>Estado</th>
+                    <th class="text-center">Acciones</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for u in users %}
+                <tr>
+                    <td>{{ u.id }}</td>
+                    <td><strong>{{ u.username }}</strong></td>
+                    <td>{{ u.full_name or '-' }}</td>
+                    <td>{{ u.email or '-' }}</td>
+                    <td>
+                        {% if u.role == 'admin' %}
+                            <span class="badge bg-danger">admin</span>
+                        {% elif u.role == 'operator' %}
+                            <span class="badge bg-primary">operator</span>
+                        {% else %}
+                            <span class="badge bg-secondary">viewer</span>
+                        {% endif %}
+                    </td>
+                    <td>
+                        {% if u.disabled %}
+                            <span class="badge bg-secondary">Inactivo</span>
+                        {% else %}
+                            <span class="badge bg-success">Activo</span>
+                        {% endif %}
+                    </td>
+                    <td class="text-center">
+                        {% if user.role == 'admin' %}
+                        <button class="btn btn-sm btn-outline-primary" onclick="editUser({{ u.id }})"><i class="fas fa-edit"></i></button>
+                        <a href="/ui/users/delete/{{ u.id }}" class="btn btn-sm btn-outline-danger" onclick="return confirm('Eliminar a {{ u.username }}?')"><i class="fas fa-trash"></i></a>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+</div>
+
+<div class="modal fade" id="userModal" tabindex="-1">
+    <div class="modal-dialog">
+        <form class="modal-content" method="post" action="/ui/users/save">
+            <input type="hidden" name="user_id" id="edit-user-id" value="0">
+            <div class="modal-header">
+                <h5 class="modal-title" id="modalTitle">Nuevo Usuario</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <div class="mb-3">
+                    <label class="form-label">Username</label>
+                    <input class="form-control" name="username" id="f-username" required>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Nombre Completo</label>
+                    <input class="form-control" name="full_name" id="f-full_name">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Email</label>
+                    <input class="form-control" name="email" id="f-email" type="email">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Contraseña <small class="text-muted">(dejar vacío para no cambiar)</small></label>
+                    <input class="form-control" name="password" id="f-password" type="password" autocomplete="off">
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">Rol</label>
+                    <select class="form-select" name="role" id="f-role">
+                        <option value="admin">Administrador</option>
+                        <option value="operator" selected>Operador</option>
+                        <option value="viewer">Solo Vista</option>
+                    </select>
+                </div>
+                <div class="form-check">
+                    <input class="form-check-input" type="checkbox" name="disabled" id="f-disabled" value="true">
+                    <label class="form-check-label">Cuenta deshabilitada</label>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="submit" class="btn btn-primary">Guardar</button>
+            </div>
+        </form>
+    </div>
+</div>
+
+<script>
+function newUser() {
+    document.getElementById('modalTitle').innerText = 'Nuevo Usuario';
+    document.getElementById('edit-user-id').value = '0';
+    document.getElementById('f-username').value = '';
+    document.getElementById('f-username').readOnly = false;
+    document.getElementById('f-full_name').value = '';
+    document.getElementById('f-email').value = '';
+    document.getElementById('f-password').value = '';
+    document.getElementById('f-role').value = 'operator';
+    document.getElementById('f-disabled').checked = false;
+}
+
+async function editUser(id) {
+    const users = {{ users_json|tojson }};
+    const u = users.find(x => x.id === id);
+    if (!u) return;
+    document.getElementById('modalTitle').innerText = 'Editar Usuario';
+    document.getElementById('edit-user-id').value = u.id;
+    document.getElementById('f-username').value = u.username;
+    document.getElementById('f-username').readOnly = true;
+    document.getElementById('f-full_name').value = u.full_name || '';
+    document.getElementById('f-email').value = u.email || '';
+    document.getElementById('f-password').value = '';
+    document.getElementById('f-role').value = u.role || 'operator';
+    document.getElementById('f-disabled').checked = u.disabled;
+    new bootstrap.Modal(document.getElementById('userModal')).show();
+}
+</script>
+{% endblock %}

@@ -358,7 +358,7 @@
 
           <div id="modalEncoderGenerators" class="mb-3 d-none bg-white p-3 border rounded shadow-sm border-primary">
               <label class="form-label small fw-bold text-primary mb-2"><i class="fas fa-video me-1"></i>Regenerar Script de Transcodificación:</label>
-              <div class="d-flex gap-2 flex-wrap align-items-center">
+              <div class="d-flex gap-2">
                   <!-- NUEVO BOTÓN MAC -->
                   <button id="modalBtnEncoderMac" type="button" class="btn btn-sm btn-outline-dark fw-bold" onclick="rebuildModalEncoderMacScript()">
                       <i class="fab fa-apple me-1"></i> Regenerar Script (Mac/GPU)
@@ -366,22 +366,6 @@
                   <button id="modalBtnEncoderLinux" type="button" class="btn btn-sm btn-outline-primary fw-bold" onclick="rebuildModalEncoderLinuxScript()">
                       <i class="fab fa-linux me-1"></i> Regenerar Script (Linux/CPU)
                   </button>
-                  <div class="vr mx-2"></div>
-                  <button id="modalBtnAnalyzeSignal" type="button" class="btn btn-sm btn-info fw-bold" onclick="analyzeSignalFromModal()">
-                      <i class="fas fa-search me-1"></i> Analizar Señal
-                  </button>
-                  <select id="modalAnalysisDuration" class="form-select form-select-sm" style="width:auto;">
-                      <option value="60">1 min</option>
-                      <option value="120">2 min</option>
-                      <option value="300" selected>5 min</option>
-                      <option value="600">10 min</option>
-                  </select>
-              </div>
-              <div id="modalAnalyzeProgress" class="d-none mt-3">
-                  <div class="progress" style="height: 24px;">
-                      <div id="modalAnalyzeProgressBar" class="progress-bar progress-bar-striped progress-bar-animated" style="width: 0%">0%</div>
-                  </div>
-                  <small id="modalAnalyzeStatus" class="text-muted mt-1 d-block">Preparando análisis...</small>
               </div>
               <div class="form-check form-switch mt-3 pt-2 border-top">
                   <input class="form-check-input ms-1" type="checkbox" id="modal_encoder_subs_check">
@@ -637,128 +621,6 @@ async function rebuildModalEncoderMacScript() {
     } finally {
         btn.disabled = false;
         btn.innerHTML = originalText;
-    }
-}
-
-// Analizar Señal desde modal de edición (async con polling)
-async function analyzeSignalFromModal() {
-    const cid = document.getElementById('modal_channel_id').value;
-    const nid = document.getElementById('modal_node_id').value;
-    if (!cid || !nid) {
-        alert("No se puede analizar: canal o nodo no definidos.");
-        return;
-    }
-
-    const duration = parseInt(document.getElementById('modalAnalysisDuration').value);
-    const btn = document.getElementById('modalBtnAnalyzeSignal');
-    const progressDiv = document.getElementById('modalAnalyzeProgress');
-    const progressBar = document.getElementById('modalAnalyzeProgressBar');
-    const statusText = document.getElementById('modalAnalyzeStatus');
-
-    btn.disabled = true;
-    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Enviando...';
-    progressDiv.classList.remove('d-none');
-    progressBar.style.width = '0%';
-    progressBar.textContent = '0%';
-    progressBar.classList.remove('bg-danger');
-    progressBar.classList.add('progress-bar-animated');
-
-    try {
-        const resp = await fetch('/orchestrator/encoder/analyze', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                channel_id: parseInt(cid),
-                node_id: parseInt(nid),
-                duration: duration
-            })
-        });
-
-        if (!resp.ok) {
-            const err = await resp.json().catch(() => ({}));
-            throw new Error(err.detail || `Error HTTP ${resp.status}`);
-        }
-
-        const initData = await resp.json();
-        if (initData.status === 'error') {
-            throw new Error(initData.error || 'Error iniciando análisis');
-        }
-
-        const taskId = initData.task_id;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Analizando...';
-        statusText.textContent = `Análisis en progreso... (task: ${taskId})`;
-
-        let elapsed = 0;
-        const maxWait = duration + 120;
-
-        const countdown = setInterval(() => {
-            elapsed++;
-            const pct = Math.min(95, Math.round(elapsed / maxWait * 100));
-            progressBar.style.width = pct + '%';
-            progressBar.textContent = pct + '%';
-            statusText.textContent = `Analizando señal en encoder... ${elapsed}s (máx ~${maxWait}s)`;
-        }, 1000);
-
-        const poll = setInterval(async () => {
-            try {
-                const statusResp = await fetch(`/api/internal/analyze-status/${taskId}`);
-                if (!statusResp.ok) {
-                    clearInterval(poll);
-                    clearInterval(countdown);
-                    throw new Error('Error consultando estado del análisis');
-                }
-
-                const statusData = await statusResp.json();
-
-                if (statusData.status === 'completed') {
-                    clearInterval(poll);
-                    clearInterval(countdown);
-
-                    document.getElementById('modal_command_text').value = statusData.script || '';
-
-                    progressBar.style.width = '100%';
-                    progressBar.textContent = '100%';
-                    progressBar.classList.remove('progress-bar-animated');
-
-                    const analysis = statusData.analysis || {};
-                    const video = analysis.video || {};
-                    const quality = analysis.quality || {};
-
-                    let summary = `<span class="text-success fw-bold">✓ Análisis completado</span><br>`;
-                    summary += `<strong>Video:</strong> ${video.codec || '?'} ${video.width || '?'}x${video.height || '?'} ${video.fps_eval || '?'}fps`;
-                    summary += `<br><strong>Frames:</strong> ${quality.frames_total || 0} | <strong>Discontinuidades:</strong> ${quality.discontinuity_count || 0}`;
-                    statusText.innerHTML = summary;
-
-                    btn.disabled = false;
-                    btn.innerHTML = '<i class="fas fa-search me-1"></i> Analizar Señal';
-
-                } else if (statusData.status === 'error') {
-                    clearInterval(poll);
-                    clearInterval(countdown);
-                    throw new Error(statusData.error || 'Error en el análisis');
-                }
-
-            } catch (pollErr) {
-                clearInterval(poll);
-                clearInterval(countdown);
-                progressBar.classList.remove('progress-bar-animated');
-                progressBar.classList.add('bg-danger');
-                progressBar.style.width = '100%';
-                progressBar.textContent = 'Error';
-                statusText.innerHTML = `<span class="text-danger fw-bold">✗ Error: ${pollErr.message}</span>`;
-                btn.disabled = false;
-                btn.innerHTML = '<i class="fas fa-search me-1"></i> Analizar Señal';
-            }
-        }, 3000);
-
-    } catch (e) {
-        progressBar.classList.remove('progress-bar-animated');
-        progressBar.classList.add('bg-danger');
-        progressBar.style.width = '100%';
-        progressBar.textContent = 'Error';
-        statusText.innerHTML = `<span class="text-danger fw-bold">✗ Error: ${e.message}</span>`;
-        btn.disabled = false;
-        btn.innerHTML = '<i class="fas fa-search me-1"></i> Analizar Señal';
     }
 }
 

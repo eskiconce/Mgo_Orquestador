@@ -58,6 +58,8 @@
                             <select name="tipo" id="nodeRole" class="form-select" required>
                                 <option value="Encoder" {% if node and node.tipo == 'Encoder' %}selected{% endif %}>Encoder (Mac/GPU)</option>
                                 <option value="Packager" {% if node and node.tipo == 'Packager' %}selected{% endif %}>Packager (Linux)</option>
+                                <option value="DRM" {% if node and node.tipo == 'DRM' %}selected{% endif %}>DRM (License Server)</option>
+                                <option value="KMS" {% if node and node.tipo == 'KMS' %}selected{% endif %}>KMS (Key Management)</option>
                             </select>
                         </div>
                     </div>

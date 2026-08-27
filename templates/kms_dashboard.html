@@ -1,0 +1,62 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container-fluid p-0">
+    <div class="row mb-4 align-items-center">
+        <div class="col">
+            <h2 class="fw-bold"><i class="fas fa-key text-warning me-2"></i>KMS - Key Management</h2>
+            <p class="text-muted">Estado del servidor KMS, claves y usuarios VIP.</p>
+        </div>
+        <div class="col-auto">
+            <span class="badge bg-dark px-3 py-2" id="kms-status">Cargando...</span>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4" id="stats-row">
+        <div class="col-md-3"><div class="card border-0 shadow-sm h-100"><div class="card-body text-center">
+            <h5 class="text-muted">Claves</h5>
+            <h2 class="fw-bold text-primary" id="stat-keys">-</h2>
+        </div></div></div>
+        <div class="col-md-3"><div class="card border-0 shadow-sm h-100"><div class="card-body text-center">
+            <h5 class="text-muted">Usuarios VIP Activos</h5>
+            <h2 class="fw-bold text-success" id="stat-vip-active">-</h2>
+        </div></div></div>
+        <div class="col-md-3"><div class="card border-0 shadow-sm h-100"><div class="card-body text-center">
+            <h5 class="text-muted">Total VIP</h5>
+            <h2 class="fw-bold text-info" id="stat-vip-total">-</h2>
+        </div></div></div>
+        <div class="col-md-3"><div class="card border-0 shadow-sm h-100"><div class="card-body text-center">
+            <h5 class="text-muted">Licencias 24h</h5>
+            <h2 class="fw-bold text-warning" id="stat-lic-24h">-</h2>
+        </div></div></div>
+    </div>
+
+    <div class="card border-0 shadow-sm mb-4">
+        <div class="card-header bg-white py-2 d-flex align-items-center border-bottom">
+            <h6 class="fw-bold mb-0"><i class="fas fa-bolt me-2 text-warning"></i>Acceso Rapido</h6>
+        </div>
+        <div class="card-body">
+            <a href="/ui/kms/users" class="btn btn-outline-primary me-2"><i class="fas fa-users me-1"></i>Usuarios VIP</a>
+            <a href="/ui/kms/keys" class="btn btn-outline-secondary me-2"><i class="fas fa-key me-1"></i>Claves</a>
+            <a href="/ui/kms/logs" class="btn btn-outline-info"><i class="fas fa-terminal me-1"></i>Logs</a>
+        </div>
+    </div>
+</div>
+
+<script>
+async function loadStats() {
+    try {
+        const r = await fetch('/api/kms-proxy/api/stats');
+        if (!r.ok) { document.getElementById('kms-status').innerHTML = '<span class="text-danger">KMS Offline</span>'; return; }
+        const d = await r.json();
+        document.getElementById('stat-keys').innerText = d.total_keys;
+        document.getElementById('stat-vip-active').innerText = d.active_vip_users;
+        document.getElementById('stat-vip-total').innerText = d.total_vip_users;
+        document.getElementById('stat-lic-24h').innerText = d.license_requests_24h;
+        document.getElementById('kms-status').innerHTML = '<span class="text-success">KMS Online</span>';
+    } catch(e) {
+        document.getElementById('kms-status').innerHTML = '<span class="text-danger">KMS Offline</span>';
+    }
+}
+loadStats();
+</script>
+{% endblock %}

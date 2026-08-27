@@ -37,6 +37,22 @@
             <button id="btnAutoBuildLinux" type="button" class="btn btn-outline-primary fw-bold" onclick="buildEncoderScriptLinux()">
               <i class="fab fa-linux me-2 text-primary"></i>Generar Script (Linux/CPU)
             </button>
+            <div class="vr mx-2"></div>
+            <button id="btnAnalyzeSignal" type="button" class="btn btn-info fw-bold" onclick="analyzeSignal()">
+              <i class="fas fa-search me-2"></i>Analizar Señal
+            </button>
+            <select id="analysisDuration" class="form-select form-select-sm" style="width:auto;">
+              <option value="60">1 min</option>
+              <option value="120">2 min</option>
+              <option value="300" selected>5 min</option>
+              <option value="600">10 min</option>
+            </select>
+          </div>
+          <div id="analyzeProgress" class="d-none mb-3">
+            <div class="progress" style="height: 24px;">
+              <div id="analyzeProgressBar" class="progress-bar progress-bar-striped progress-bar-animated" style="width: 0%">0%</div>
+            </div>
+            <small id="analyzeStatus" class="text-muted mt-1 d-block">Preparando análisis...</small>
           </div>
 
           <div class="d-flex flex-wrap gap-3 align-items-center p-2 bg-light border rounded">
@@ -90,12 +106,21 @@
                Seleccione el tipo de empaquetado para generar el bash y cargarlo en el área de Script de Ejecución.
             </small>
             
-            <div class="form-check form-switch mt-3 p-3 bg-light border rounded" style="max-width: 400px;">
-                <input class="form-check-input ms-1" type="checkbox" id="isDrmCheck">
-                <label class="form-check-label ms-2 fw-bold" style="color: #6f42c1;" for="isDrmCheck">
-                    <i class="fas fa-lock me-1"></i> Este proceso utiliza DRM (Widevine)
-                </label>
-                <div class="form-text small ms-1 mt-1">Se marca automáticamente al generar el script, pero puedes forzarlo si pegas un código manual.</div>
+            <div class="d-flex flex-wrap gap-3 align-items-center mt-3">
+                <div class="form-check form-switch p-3 bg-light border rounded" style="max-width: 400px;">
+                    <input class="form-check-input ms-1" type="checkbox" id="isDrmCheck">
+                    <label class="form-check-label ms-2 fw-bold" style="color: #6f42c1;" for="isDrmCheck">
+                        <i class="fas fa-lock me-1"></i> Este proceso utiliza DRM (Widevine)
+                    </label>
+                    <div class="form-text small ms-1 mt-1">Se marca automáticamente al generar el script, pero puedes forzarlo si pegas un código manual.</div>
+                </div>
+                <div class="form-check form-switch p-3 bg-light border rounded" style="max-width: 300px;">
+                    <input class="form-check-input ms-1" type="checkbox" id="rotateKeyCheck" disabled>
+                    <label class="form-check-label ms-2 fw-bold text-muted" for="rotateKeyCheck">
+                        <i class="fas fa-sync-alt me-1"></i> Rotar llave al generar
+                    </label>
+                    <div class="form-text small ms-1 mt-1">Usa el botón "Rotar llave" en la lista de procesos para rotar keys.</div>
+                </div>
             </div>
         </div>
 
@@ -466,6 +491,151 @@
     }
   }
 
+  // 7B-2. Analizador de Señal (modo async con polling)
+  async function analyzeSignal() {
+    if (!selectedNodeId || !channelSelect.value) {
+      alert("Seleccione primero un canal y un encoder.");
+      return;
+    }
+
+    const duration = parseInt(document.getElementById('analysisDuration').value);
+    const btn = document.getElementById('btnAnalyzeSignal');
+    const progressDiv = document.getElementById('analyzeProgress');
+    const progressBar = document.getElementById('analyzeProgressBar');
+    const statusText = document.getElementById('analyzeStatus');
+
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Enviando...';
+    progressDiv.classList.remove('d-none');
+    progressBar.style.width = '0%';
+    progressBar.textContent = '0%';
+    progressBar.classList.remove('bg-danger');
+    progressBar.classList.add('progress-bar-animated');
+
+    try {
+      // 1. Enviar solicitud al orquestador (no bloquea)
+      const resp = await fetch('/orchestrator/encoder/analyze', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          channel_id: parseInt(channelSelect.value),
+          node_id: selectedNodeId,
+          duration: duration
+        })
+      });
+
+      if (!resp.ok) {
+        const err = await resp.json().catch(() => ({}));
+        throw new Error(err.detail || `Error HTTP ${resp.status}`);
+      }
+
+      const initData = await resp.json();
+      if (initData.status === 'error') {
+        throw new Error(initData.error || 'Error iniciando análisis');
+      }
+
+      const taskId = initData.task_id;
+      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Analizando...';
+      statusText.textContent = `Análisis en progreso... (task: ${taskId})`;
+
+      // 2. Polling del resultado
+      let elapsed = 0;
+      const maxWait = duration + 120; // máximo tiempo de espera
+      const pollInterval = 3000; // cada 3 segundos
+
+      const countdown = setInterval(() => {
+        elapsed++;
+        const pct = Math.min(95, Math.round(elapsed / maxWait * 100));
+        progressBar.style.width = pct + '%';
+        progressBar.textContent = pct + '%';
+        const remaining = Math.max(0, maxWait - elapsed);
+        statusText.textContent = `Analizando señal en encoder... ${elapsed}s (máx ~${maxWait}s)`;
+      }, 1000);
+
+      const poll = setInterval(async () => {
+        try {
+          const statusResp = await fetch(`/api/internal/analyze-status/${taskId}`);
+          if (!statusResp.ok) {
+            clearInterval(poll);
+            clearInterval(countdown);
+            throw new Error('Error consultando estado del análisis');
+          }
+
+          const statusData = await statusResp.json();
+
+          if (statusData.status === 'completed') {
+            clearInterval(poll);
+            clearInterval(countdown);
+
+            // Colocar script en textarea
+            document.getElementById('commandInput').value = statusData.script || '';
+
+            // Mostrar resumen
+            progressBar.style.width = '100%';
+            progressBar.textContent = '100%';
+            progressBar.classList.remove('progress-bar-animated');
+
+            const analysis = statusData.analysis || {};
+            const video = analysis.video || {};
+            const quality = analysis.quality || {};
+            const warnings = analysis.warnings || [];
+            const recs = analysis.recommendations || [];
+
+            let summary = `<span class="text-success fw-bold">✓ Análisis completado</span><br>`;
+            summary += `<strong>Video:</strong> ${video.codec || '?'} ${video.width || '?'}x${video.height || '?'} ${video.fps_eval || '?'}fps`;
+            if (video.interlaced) summary += ` <span class="badge bg-warning">Interlaced ${video.interlace_type || ''}</span>`;
+            summary += `<br>`;
+            summary += `<strong>Frames:</strong> ${quality.frames_total || 0} | <strong>Discontinuidades:</strong> ${quality.discontinuity_count || 0} | <strong>Decode errors:</strong> ${quality.decode_errors || 0}<br>`;
+
+            if (warnings.length > 0) {
+              summary += `<span class="text-danger"><strong>Warnings:</strong></span><br>`;
+              warnings.forEach(w => {
+                summary += `<span class="text-${w.level === 'HIGH' ? 'danger' : 'warning'}">• ${w.message}</span><br>`;
+              });
+            }
+
+            if (recs.length > 0) {
+              summary += `<strong>Recomendaciones:</strong><br>`;
+              recs.forEach(r => {
+                summary += `<span class="text-info">[${r.category}]</span> ${r.value} — ${r.reason}<br>`;
+              });
+            }
+
+            statusText.innerHTML = summary;
+            btn.disabled = false;
+            btn.innerHTML = '<i class="fas fa-search me-2"></i>Analizar Señal';
+
+          } else if (statusData.status === 'error') {
+            clearInterval(poll);
+            clearInterval(countdown);
+            throw new Error(statusData.error || 'Error en el análisis');
+          }
+          // Si status es "pending" o "running", continuar polling
+
+        } catch (pollErr) {
+          clearInterval(poll);
+          clearInterval(countdown);
+          progressBar.classList.remove('progress-bar-animated');
+          progressBar.classList.add('bg-danger');
+          progressBar.style.width = '100%';
+          progressBar.textContent = 'Error';
+          statusText.innerHTML = `<span class="text-danger fw-bold">✗ Error: ${pollErr.message}</span>`;
+          btn.disabled = false;
+          btn.innerHTML = '<i class="fas fa-search me-2"></i>Analizar Señal';
+        }
+      }, pollInterval);
+
+    } catch (e) {
+      progressBar.classList.remove('progress-bar-animated');
+      progressBar.classList.add('bg-danger');
+      progressBar.style.width = '100%';
+      progressBar.textContent = 'Error';
+      statusText.innerHTML = `<span class="text-danger fw-bold">✗ Error: ${e.message}</span>`;
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-search me-2"></i>Analizar Señal';
+    }
+  }
+
   // 7C. Generador de Script PACKAGER
   // async function buildPackagerScript() {
   //   if (!selectedNodeId || !channelSelect.value) {
@@ -548,7 +718,7 @@
     const btn = document.getElementById('btnAutoPackagerDrm');
     const originalText = btn.innerHTML;
     btn.disabled = true;
-    document.getElementById('btnAutoPackager').disabled = true; // Bloquea el otro
+    document.getElementById('btnAutoPackager').disabled = true;
     btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Generando DRM...';
 
     try {
