@@ -1,3 +1,6 @@
 schema: spec-driven
 skip_specs: true
 created: 2026-08-27
+updated: 2026-08-27
+status: active
+description: "Plan de mejoras completo del orquestador — análisis de estructura, priorización por fase, workflow de cambios"
