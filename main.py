@@ -28,6 +28,7 @@ from services import cms_gateway
 from services import vod_service
 from utils.helpers import time_duration, sync_haproxy_map, task_delayed_action, log_monitor_event
 from core.version import VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH, VERSION_STRING, VERSION_TYPE
+from core.http_client import create_async_client
 
 # --- HTTP Client Singleton ---
 http_client: httpx.AsyncClient = None
@@ -35,13 +36,9 @@ http_client: httpx.AsyncClient = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global http_client
-    # Startup: crear cliente compartido con connection pooling
-    limits = httpx.Limits(max_connections=50, max_keepalive_connections=20)
-    timeout = httpx.Timeout(connect=5.0, read=30.0, write=30.0, pool=5.0)
-    http_client = httpx.AsyncClient(limits=limits, timeout=timeout)
+    http_client = create_async_client()
     logger.info("HTTP client started with connection pooling")
     yield
-    # Shutdown: cerrar conexiones
     await http_client.aclose()
     logger.info("HTTP client closed")
 
@@ -1009,40 +1006,6 @@ def system_logs_view(request: Request, level: Optional[str] = None, search: Opti
     return templates.TemplateResponse("system_logs.html", {"request": request, "logs": logs, "user": current_user, "filters": {"level": level or "", "search": search or "", "fecha": fecha or ""}})
 
 
-
-# @app.get("/ui/monitor-logs", response_class=HTMLResponse)
-# async def monitor_logs_view(
-#     request: Request, 
-#     event_type: Optional[str] = None, 
-#     search: Optional[str] = None, 
-#     fecha: Optional[str] = None, 
-#     db: Session = Depends(get_db), 
-#     current_user: models.User = Depends(get_current_user)
-# ):
-#     # Traemos la relación con node para poder mostrar el hostname en la tabla
-#     query = db.query(models.MonitorLog).options(joinedload(models.MonitorLog.node))
-    
-#     # --- Lógica de Carga Inicial (Hoy por defecto) ---
-#     if not any([event_type, search, fecha]):
-#         hoy = datetime.now().date()
-#         query = query.filter(cast(models.MonitorLog.timestamp, Date) == hoy)
-#         fecha = hoy.strftime("%Y-%m-%d")
-
-#     # --- Aplicación de Filtros ---
-#     if event_type: 
-#         query = query.filter(models.MonitorLog.event_type == event_type)
-#     if search: 
-#         query = query.filter(models.MonitorLog.message.ilike(f"%{search}%"))
-#     if fecha:
-#         try: 
-#             query = query.filter(cast(models.MonitorLog.timestamp, Date) == datetime.strptime(fecha, "%Y-%m-%d").date())
-#         except: 
-#             pass
-
-#     logs = query.order_by(models.MonitorLog.timestamp.desc()).limit(1000).all()
-    
-#     filters = {"event_type": event_type or "", "search": search or "", "fecha": fecha or ""}
-#     return templates.TemplateResponse("monitor_logs.html", {"request": request, "logs": logs, "user": current_user, "filters": filters})
 
 @app.get("/ui/monitor-logs", response_class=HTMLResponse)
 def monitor_logs_view(

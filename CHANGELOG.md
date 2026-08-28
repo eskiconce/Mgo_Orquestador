@@ -1,5 +1,16 @@
 # Changelog — Encoder Orchestrator
 
+## v2.9.0 (28 Aug 2026) — Fase 1: Fundación
+
+- Nuevo: `core/config.py` centralizado con `python-dotenv` — todas las constantes usan `os.getenv()` con defaults
+- Nuevo: `.env.example` como plantilla de configuración
+- Nuevo: `requirements.txt` con dependencias del proyecto
+- Nuevo: `core/http_client.py` — factory unificada para httpx sync/async con pool compartido
+- Fix: `database.py` importa `DATABASE_URL` desde config (antes hardcodeada)
+- Fix: `monitor.py` importa config desde `core.config` (eliminados duplicados)
+- Limpieza: eliminados bloques de código comentado en `monitor.py` (~100 líneas) y `main.py` (~30 líneas)
+- OpenSpec: change `fase-1-fundacion` (config, requirements, cleanup, http-client)
+
 ## v2.8.6 (27 Aug 2026) — Fix recovery post-reinicio
 
 - Fix: crash en `process_node_thread` cuando agente devuelve formato inesperado en `/jobs/status` (lista de strings en vez de dicts) — validación defensiva en línea 705

@@ -1,13 +1,11 @@
 from sqlalchemy import create_engine
 from sqlalchemy.ext.declarative import declarative_base
 from sqlalchemy.orm import sessionmaker
-
-# USO DE PYMYSQL (Driver Puro Python)
-SQLALCHEMY_DATABASE_URL = "mysql+pymysql://ingservice:S3rv1c3.Ingenieria@localhost:3306/encoder_orchestrator"
+from core.config import DATABASE_URL
 
 try:
     engine = create_engine(
-        SQLALCHEMY_DATABASE_URL,
+        DATABASE_URL,
         pool_recycle=3600,
         pool_size=10
     )

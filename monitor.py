@@ -15,23 +15,17 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 # --- IMPORTAMOS LA FUNCIÓN REGISTRADORA DEL MONITOR ---
 from utils.helpers import log_monitor_event
 from services import builders as bld
+from core.config import (
+    AGENT_API_KEY, AGENT_PORT, DRM_HEALTH_PORT, POLL_INTERVAL,
+    CMS_REAL_WEBHOOK, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
+)
+from core.http_client import create_sync_client
 
 # Almacena el contenido del log de cada proceso entre polls, para contar solo errores NUEVOS.
 _prev_logs = {}
 
 # Configuración
 LOG_FILE = "logs/monitor.log"
-AGENT_PORT = 8000
-DRM_HEALTH_PORT = 8080
-AGENT_API_KEY = "a1b2c3d4e5f67890123456789abcdef0"
-POLL_INTERVAL = 10
-
-# CONSTANTE DEL WEBHOOK DEL CMS
-CMS_REAL_WEBHOOK = "https://core-dev.mundogo.cl/api/webhook-vod"
-
-# --- TELEGRAM ---
-TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN", "")
-TELEGRAM_CHAT_ID = os.environ.get("TELEGRAM_CHAT_ID", "")
 
 # --- STATE TRACKER para errores TS y detección de estancamiento en encoders ---
 # Estructura: { job_id: { "first_seen": datetime, "last_restart": datetime|None,
@@ -314,101 +308,6 @@ def _send_final_alert(db, job, prog_name):
     logging.error(f"TS FINAL ALERT: {prog_name}")
 
 
-# ---- se agrega esta nueva funcion 13jun26 para monitoreo de errores en encoders ---- #
-# def check_encoder_health_logs(db, job, req_session):
-#     """
-#     Lee los logs del Encoder para detectar corrupción de red (UDP) y forzar
-#     un reinicio preventivo antes de que el stream colapse o se pixele.
-#     """
-#     # Solo revisamos procesos que llevan un rato corriendo
-#     if job.status != 'running':
-#         return False
-
-#     prog_name = f"channel_{job.channel.channel_name}_{job.id}"
-#     url_logs = f"http://{job.node.ip_address}:{AGENT_PORT}/jobs/logs"
-    
-#     try:
-#         # Pedimos las últimas 30 líneas del log de errores
-#         resp = req_session.get(url_logs, params={"program_name": prog_name, "type": "err", "lines": 30}, timeout=3)
-#         if resp.status_code == 200:
-#             log_content = resp.json().get("content", "")
-            
-#             # Buscamos indicios críticos de corrupción de paquetes UDP
-#             # if "Packet corrupt" in log_content or "PES packet size mismatch" in log_content or "co located POCs unavailable" in log_content:
-#             # Buscamos indicios críticos de corrupción o desincronización de reloj (timestamp)
-#             if "Packet corrupt" in log_content or "PES packet size mismatch" in log_content or "co located POCs unavailable" in log_content or "timestamp discontinuity" in log_content:
-#                 logging.warning(f"🚨 CORRUPCIÓN UDP detectada en Encoder {prog_name}. Forzando reinicio preventivo...")
-#                 log_monitor_event(db, "AUTO_RESTART", f"Corrupción UDP detectada en origen de {prog_name}. Reiniciando para sanar buffer.", job.node_id)
-                
-#                 # Ejecutar reinicio del encoder
-#                 send_command(job, "restart", req_session)
-                
-#                 # Actualizamos la hora para que el sistema sepa que acaba de reiniciar
-#                 job.started_at = datetime.now()
-#                 db.add(job)
-#                 db.commit()
-                
-#                 # Opcional: Avisar al CMS del micro-corte preventivo
-#                 notify_cms_channel_status(job.channel_id, "warning", "Reinicio preventivo por corrupción de red en el origen UDP.")
-#                 return True
-#     except Exception:
-#         pass 
-        
-#     return False
-
-# ---- correccion para evitar que el reinicio del canal entre en loop cuando detecta una falla 14jun26 ---- #
-# def check_encoder_health_logs(db, job, req_session):
-#     """
-#     Lee los logs del Encoder para detectar corrupción de red (UDP) y forzar
-#     un reinicio preventivo antes de que el stream colapse o se pixele.
-#     """
-#     # Solo revisamos procesos que están en estado running y tienen fecha de inicio
-#     if job.status != 'running' or not job.started_at:
-#         return False
-
-#     # --- NUEVO: PERÍODO DE GRACIA (COOLDOWN) ---
-#     # Calculamos cuánto tiempo lleva corriendo el encoder
-#     uptime = abs((datetime.now() - job.started_at).total_seconds())
-    
-#     # Si lleva menos de 60 segundos (1 minuto) corriendo, ignoramos el log.
-#     # Esto da tiempo a que el nuevo proceso de FFmpeg escriba líneas limpias 
-#     # y empuje los errores viejos fuera de la lectura de las últimas 30 líneas.
-#     if uptime < 60:
-#         return False
-#     # ------------------------------------------
-
-#     prog_name = f"channel_{job.channel.channel_name}_{job.id}"
-#     url_logs = f"http://{job.node.ip_address}:{AGENT_PORT}/jobs/logs"
-    
-#     try:
-#         # Pedimos las últimas 30 líneas del log de errores
-#         resp = req_session.get(url_logs, params={"program_name": prog_name, "type": "err", "lines": 30}, timeout=3)
-#         if resp.status_code == 200:
-#             log_content = resp.json().get("content", "")
-            
-#             # Buscamos indicios críticos de corrupción o desincronización de reloj
-#             if "Packet corrupt" in log_content or "PES packet size mismatch" in log_content or "co located POCs unavailable" in log_content or "timestamp discontinuity" in log_content:
-#                 logging.warning(f"🚨 CORRUPCIÓN UDP detectada en Encoder {prog_name}. Forzando reinicio preventivo...")
-#                 log_monitor_event(db, "AUTO_RESTART", f"Corrupción UDP/Time detectada en origen de {prog_name}. Reiniciando para sanar buffer.", job.node_id)
-                
-#                 # Ejecutar reinicio del encoder
-#                 send_command(job, "restart", req_session)
-                
-#                 # Actualizamos la hora para que el sistema sepa que acaba de reiniciar
-#                 # y active automáticamente el Cooldown de 60 segundos en la próxima vuelta.
-#                 job.started_at = datetime.now()
-#                 db.add(job)
-#                 db.commit()
-                
-#                 # Avisar al CMS del micro-corte preventivo
-#                 notify_cms_channel_status(job.channel_id, "warning", "Reinicio preventivo por corrupción de red/tiempo en el origen UDP.")
-#                 return True
-#     except Exception:
-#         pass 
-        
-#     return False
-
-# ---- verison3 de la mejora monitoreo de estabilidad en encoders linux 14jun26 ---- #
 def check_encoder_health_logs(db, job, req_session):
     """
     Lee los logs del Encoder para detectar corrupción severa de red (UDP).
@@ -540,11 +439,7 @@ def check_timestamp_discontinuity(db, job, req_session):
 def process_node_thread(node_id):
     """Maneja la sincronización de UN SOLO nodo de forma independiente."""
     db = SessionLocal()
-    req_session = httpx.Client(
-        limits=httpx.Limits(max_connections=50, max_keepalive_connections=20),
-        timeout=httpx.Timeout(connect=5.0, read=30.0, write=30.0, pool=10.0)
-    )
-    req_session.headers.update({"X-API-Key": AGENT_API_KEY})
+    req_session = create_sync_client()
     
     try:
         node = db.query(models.Node).filter(models.Node.id == node_id).first()
