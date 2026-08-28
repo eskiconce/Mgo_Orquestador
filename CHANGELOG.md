@@ -1,5 +1,14 @@
 # Changelog — Encoder Orchestrator
 
+## v2.10.0 (28 Aug 2026) — Fase 2: Modularización
+
+- Nuevo: `routers/` — main.py dividido en 10 routers por dominio (auth, users, dashboard, nodes, channels, processes, drm, orchestrator, internal, ui_logs)
+- Nuevo: `core/deps.py` — dependencias compartidas (auth, roles, templates)
+- Nuevo: `routers/internal.py` — endpoints internos (failover, analyze-callback)
+- Nuevo: `routers/orchestrator.py` — orquestación de jobs y builders
+- main.py reducido de 1051 a ~80 líneas (solo setup + router includes)
+- OpenSpec: change `fase-2-modularizacion` (router split)
+
 ## v2.9.0 (28 Aug 2026) — Fase 1: Fundación
 
 - Nuevo: `core/config.py` centralizado con `python-dotenv` — todas las constantes usan `os.getenv()` con defaults
