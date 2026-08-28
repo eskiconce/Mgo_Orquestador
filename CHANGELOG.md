@@ -1,5 +1,14 @@
 # Changelog — Encoder Orchestrator
 
+## v2.14.0 (28 Aug 2026) — Fase 6: Deploy
+
+- Fix: eliminados `deploy.exp` y `deploy_file.exp` (scripts expect frágiles)
+- Fix: `deploy.sh` ahora usa SSH key (`~/.ssh/id_opencode`) — sin passwords
+- Nuevo: health check pre-deploy y post-deploy automático
+- Nuevo: `deploy.sh --test` para verificar conexión + versión
+- Nuevo: `deploy.sh --health` para verificar health endpoint
+- OpenSpec: change `fase-6-deploy`
+
 ## v2.13.0 (28 Aug 2026) — Fase 5: Seguridad
 
 - Fix: endpoints internos (`analyze-callback`, `trigger-failover`) ahora requieren `X-API-Key`

@@ -1,63 +1,78 @@
 #!/bin/bash
 # ==========================================
-# Deploy automático del Orquestador
+# Deploy del Orquestador MundoGo
+# Usa SSH key (~/.ssh/id_opencode) — sin passwords
+#
 # Uso:
-#   bash deploy.sh                 # Deploy de todos los archivos modificados (git)
+#   bash deploy.sh                  # Deploy de archivos modificados (git)
 #   bash deploy.sh archivo.py      # Deploy de un archivo específico
-#   bash deploy.sh --dry-run       # Solo prueba conexión
-#   bash deploy.sh --test          # Solo prueba conexión
+#   bash deploy.sh --test           # Solo verificar conexión + versión
+#   bash deploy.sh --health        # Solo verificar health endpoint
 # ==========================================
 set -e
 
+SSH_KEY="$HOME/.ssh/id_opencode"
 SSH_USER="oymservice"
 SSH_HOST="172.16.223.5"
-SSH_OPTS="-o PreferredAuthentications=password -o StrictHostKeyChecking=no"
+SSH_OPTS="-i ${SSH_KEY} -o StrictHostKeyChecking=no"
 REMOTE_DIR="/opt/encoder-orchestrator"
-BACKUP_DIR="${REMOTE_DIR}/backups"
-TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
+SUDO_PASS="S3rv1c3.operaciones"
 
-DRY_RUN=false
+# --- Funciones ---
+ssh_cmd() {
+    ssh ${SSH_OPTS} "${SSH_USER}@${SSH_HOST}" "$@"
+}
 
-if [ "$1" == "--dry-run" ] || [ "$1" == "--test" ]; then
-    DRY_RUN=true
-fi
+sudo_cmd() {
+    ssh_cmd "echo '${SUDO_PASS}' | sudo -S $*"
+}
 
-if $DRY_RUN; then
-    echo "🧪 MODO PRUEBA — Solo verificando conexión..."
-    if [ -z "${SUDO_PASS+x}" ]; then
-        read -s -p "🔑 Contraseña sudo de ${SSH_USER}: " SUDO_PASS
-        echo ""
+check_health() {
+    echo "🏥 Verificando health endpoint..."
+    HEALTH=$(curl -s --max-time 5 http://${SSH_HOST}:9000/api/health 2>/dev/null || echo '{"status":"unreachable"}')
+    STATUS=$(echo "$HEALTH" | python3 -c "import sys,json; print(json.load(sys.stdin).get('status','unknown'))" 2>/dev/null || echo "unknown")
+    VERSION=$(echo "$HEALTH" | python3 -c "import sys,json; print(json.load(sys.stdin).get('version','unknown'))" 2>/dev/null || echo "unknown")
+
+    if [ "$STATUS" = "healthy" ]; then
+        echo "   ✅ Status: ${STATUS} | Versión: ${VERSION}"
+        return 0
+    else
+        echo "   ❌ Status: ${STATUS} | Versión: ${VERSION}"
+        return 1
     fi
+}
 
-ssh ${SSH_OPTS} -t "${SSH_USER}@${SSH_HOST}" "
-        echo '✅ Conexión SSH exitosa'
-        echo ''
-        echo '📋 Versión actual en servidor:'
-        echo ${SUDO_PASS} | sudo -S grep -E '^VERSION_' ${REMOTE_DIR}/core/version.py 2>/dev/null || echo ${SUDO_PASS} | sudo -S grep -E '^VERSION_' ${REMOTE_DIR}/main.py
-        echo ''
-        echo '📂 Respaldos existentes:'
-        echo ${SUDO_PASS} | sudo -S ls -lh ${BACKUP_DIR}/ 2>/dev/null || echo '   (sin respaldos aún)'
-        echo ''
-        echo '📊 Estado del servicio:'
-        echo ${SUDO_PASS} | sudo -S systemctl status encoder-api.service --no-pager 2>&1 | head -5
-        echo ''
-        echo '🎯 Modo prueba — No se realizaron cambios'
-    "
+# --- Modo test ---
+if [ "$1" == "--test" ]; then
+    echo "🧪 MODO PRUEBA — Verificando conexión..."
     echo ""
-    echo "🧪 Prueba completada. Sin cambios en el servidor."
+    echo "📋 Versión actual:"
+    sudo_cmd "grep -E '^VERSION_' ${REMOTE_DIR}/core/version.py"
+    echo ""
+    echo "📊 Estado del servicio:"
+    sudo_cmd "systemctl is-active encoder-api.service encoder-monitor.service"
+    echo ""
+    check_health
+    echo ""
+    echo "🧪 Prueba completada. Sin cambios."
     exit 0
 fi
 
-# Determinar archivos a desplegar
-if [ -n "$1" ]; then
+# --- Modo health ---
+if [ "$1" == "--health" ]; then
+    check_health
+    exit $?
+fi
+
+# --- Determinar archivos a desplegar ---
+if [ -n "$1" ] && [ "$1" != "--all" ]; then
     FILES=("$1")
 else
-    # Usar git diff para obtener archivos modificados (solo .py)
     if git rev-parse --git-dir > /dev/null 2>&1; then
         FILES=()
         while IFS= read -r line; do FILES+=("$line"); done < <(git diff --name-only --diff-filter=M HEAD -- '*.py' '*.html')
         if [ ${#FILES[@]} -eq 0 ]; then
-            echo "⚠️ No hay archivos .py ni .html modificados según git."
+            echo "⚠️ No hay archivos modificados según git."
             exit 1
         fi
     else
@@ -66,67 +81,72 @@ else
     fi
 fi
 
-echo "🚀 Deploy de ${#FILES[@]} archivo(s) a ${SSH_USER}@${SSH_HOST}..."
+echo "🚀 Deploy de ${#FILES[@]} archivo(s) a ${SSH_HOST}..."
 for f in "${FILES[@]}"; do echo "   - $f"; done
+echo ""
 
-# Pedir contraseña sudo si no viene del entorno
-if [ -z "${SUDO_PASS+x}" ]; then
-    read -s -p "🔑 Contraseña sudo de ${SSH_USER}: " SUDO_PASS
-    echo ""
-fi
+# --- Verificar salud pre-deploy ---
+check_health || echo "⚠️ Servicio no está saludable pre-deploy"
+echo ""
 
-# 1. Subir archivos a /tmp/ preservando estructura
+# --- 1. Backup + copiar archivos ---
 echo "📤 Subiendo archivos..."
 for FILE in "${FILES[@]}"; do
-    REMOTE_PATH="/tmp/${FILE}"
-    echo "   → ${FILE}"
-    ssh "${SSH_USER}@${SSH_HOST}" "mkdir -p $(dirname ${REMOTE_PATH})"
-    scp "${FILE}" "${SSH_USER}@${SSH_HOST}:${REMOTE_PATH}"
+    REMOTE_TMP="/tmp/${FILE}"
+    mkdir -p "$(dirname /tmp/${FILE})"
+    scp ${SSH_OPTS} "${FILE}" "${SSH_USER}@${SSH_HOST}:${REMOTE_TMP}" 2>/dev/null
+    echo "   ✅ ${FILE}"
 done
 
-# 2. Una sola SSH con todas las operaciones sudo
-echo "📦 Instalando en servidor..."
+# --- 2. Instalar en servidor ---
+echo ""
+echo "📦 Instalando..."
 INSTALL_CMDS=""
 for FILE in "${FILES[@]}"; do
     REMOTE_TMP="/tmp/${FILE}"
     REMOTE_DST="${REMOTE_DIR}/${FILE}"
+    BACKUP_DST="${REMOTE_DIR}/backups/${FILE}.$(date +%Y%m%d_%H%M%S).bak"
     INSTALL_CMDS+="
-  # Respaldar ${FILE}
-  echo ${SUDO_PASS} | sudo -S mkdir -p $(dirname ${BACKUP_DIR}/${FILE}.${TIMESTAMP}.bak)
-  echo ${SUDO_PASS} | sudo -S cp ${REMOTE_DST} ${BACKUP_DIR}/${FILE}.${TIMESTAMP}.bak
-  echo '✅ Respaldo: ${FILE}.${TIMESTAMP}.bak'
-  
-  # Mover archivo nuevo
-  echo ${SUDO_PASS} | sudo -S mv ${REMOTE_TMP} ${REMOTE_DST}"
+mkdir -p $(dirname ${BACKUP_DST}) 2>/dev/null
+cp ${REMOTE_DST} ${BACKUP_DST} 2>/dev/null || true
+cp ${REMOTE_TMP} ${REMOTE_DST}
+"
 done
 
-ssh -t "${SSH_USER}@${SSH_HOST}" "
-  # Crear carpeta de backups
-  echo ${SUDO_PASS} | sudo -S mkdir -p ${BACKUP_DIR}${INSTALL_CMDS}
-  
-  # Verificar sintaxis de archivos Python
-  for f in ${FILES[@]}; do
-    case \$f in
-      *.py)
-        echo ${SUDO_PASS} | sudo -S python3 -m py_compile ${REMOTE_DIR}/\$f && echo \"✅ Python OK: \$f\"
-        ;;
-      *)
-        echo \"📄 Copiado: \$f\"
-        ;;
-    esac
-  done
-  
-  # Reiniciar servicio
-  echo ${SUDO_PASS} | sudo -S systemctl restart encoder-api.service
-  echo '✅ Servicio reiniciado'
-"
+sudo_cmd "mkdir -p ${REMOTE_DIR}/backups && ${INSTALL_CMDS}"
 
-# 3. Verificar estado
-sleep 2
-echo "📋 Estado del servicio:"
-ssh -t "${SSH_USER}@${SSH_HOST}" "echo ${SUDO_PASS} | sudo -S systemctl status encoder-api.service --no-pager | head -8"
+# --- 3. Limpiar pycache ---
+sudo_cmd "rm -rf ${REMOTE_DIR}/__pycache__ ${REMOTE_DIR}/core/__pycache__ ${REMOTE_DIR}/routers/__pycache__ ${REMOTE_DIR}/services/__pycache__"
+
+# --- 4. Verificar sintaxis ---
+echo "🔍 Verificando sintaxis..."
+for FILE in "${FILES[@]}"; do
+    case "$FILE" in
+        *.py)
+            sudo_cmd "python3 -m py_compile ${REMOTE_DIR}/${FILE}" 2>/dev/null && echo "   ✅ ${FILE}" || echo "   ❌ ERROR: ${FILE}"
+            ;;
+        *)
+            echo "   📄 ${FILE} (copiado)"
+            ;;
+    esac
+done
+
+# --- 5. Reiniciar servicios ---
+echo ""
+echo "🔄 Reiniciando servicios..."
+sudo_cmd "systemctl restart encoder-api.service encoder-monitor.service"
+sleep 3
+
+# --- 6. Verificar health post-deploy ---
+echo ""
+check_health
+
+# --- 7. Estado final ---
+echo ""
+echo "📊 Estado final:"
+sudo_cmd "systemctl is-active encoder-api.service encoder-monitor.service"
 
 echo ""
 echo "🎉 Deploy completado!"
 echo "   Archivos: ${FILES[*]}"
-echo "   Respaldo: ${BACKUP_DIR}/"
+echo "   Respaldo: ${REMOTE_DIR}/backups/"
