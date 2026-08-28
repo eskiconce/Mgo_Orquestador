@@ -8,6 +8,7 @@ from core.version import VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH, VERSION_ST
 from core.http_client import create_async_client
 from core.logging_service import logger
 from core.deps import templates
+from utils.helpers import time_duration
 from services import cms_gateway, vod_service
 
 # --- Routers ---
@@ -38,7 +39,7 @@ app = FastAPI(title="MundoGo-Plus Orchestrator", lifespan=lifespan)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# --- Context Processor: Inyecta versión en TODOS los templates ---
+# --- Context Processor: Inyecta versión y filtros en TODOS los templates ---
 templates.env.globals.update({
     "version_major": VERSION_MAJOR,
     "version_minor": VERSION_MINOR,
@@ -46,6 +47,7 @@ templates.env.globals.update({
     "version_string": VERSION_STRING,
     "version_type": VERSION_TYPE
 })
+templates.env.filters["duration"] = time_duration
 
 # --- Include routers ---
 app.include_router(cms_gateway.router)
