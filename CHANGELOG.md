@@ -1,5 +1,16 @@
 # Changelog — Encoder Orchestrator
 
+## v2.12.0 (28 Aug 2026) — Fase 4: Testing
+
+- Nuevo: `tests/` — framework de tests con pytest
+- Nuevo: `tests/conftest.py` — fixtures (BD SQLite en memoria, TestClient)
+- Nuevo: `tests/test_health.py` — 14 tests para health/readiness/metrics endpoints
+- Nuevo: `tests/test_api.py` — 8 tests para auth/endpoints protegidos
+- Nuevo: `pyproject.toml` — configuración de pytest
+- Fix: type hints `Optional[T]` en vez de `T | None` (compat Python 3.9)
+- 22 tests pasando, cobertura de health + auth + endpoints principales
+- OpenSpec: change `fase-4-testing`
+
 ## v2.11.0 (28 Aug 2026) — Fase 3: Observabilidad
 
 - Nuevo: `GET /api/health` — health check con versión, DB, uptime, métricas de jobs/nodos/canales

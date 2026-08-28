@@ -3,6 +3,7 @@ from fastapi.responses import RedirectResponse
 from fastapi.responses import HTMLResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session, joinedload
+from typing import Optional
 import requests, re
 
 import models
@@ -18,7 +19,7 @@ router = APIRouter(tags=["processes"])
 class JobCreateSchema(BaseModel):
     channel_id: int
     node_id: int
-    command: str | None = None
+    command: Optional[str] = None
     create_mirror: bool = True
     is_drm: bool = False
 

@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException, Body
 from sqlalchemy.orm import Session, joinedload
 from datetime import datetime
+from typing import Optional
 from pydantic import BaseModel
 import httpx
 import atexit
@@ -25,7 +26,7 @@ class LockRequest(BaseModel):
     process_id: str
 
 class CMSRecordRequest(BaseModel):
-    process_id: str | None = None
+    process_id: Optional[str] = None
     canal: str
     program_start: str
     program_end: str
@@ -34,15 +35,15 @@ class CMSRecordRequest(BaseModel):
     nombre_mpd: str = "video"
 
 class CMSVodRequest(BaseModel):
-    process_id: str | None = None
+    process_id: Optional[str] = None
     canal: str
     epg_start: str
     epg_end: str
     vod_dir: str
-    nombre_mpd: str | None = None
+    nombre_mpd: Optional[str] = None
 
 class CMSDeleteRequest(BaseModel):
-    process_id: str | None = None
+    process_id: Optional[str] = None
     output_dir: str  
     kind: str = "recording"    
 
