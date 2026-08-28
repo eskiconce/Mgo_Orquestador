@@ -8,6 +8,7 @@ from core.version import VERSION_MAJOR, VERSION_MINOR, VERSION_PATCH, VERSION_ST
 from core.http_client import create_async_client
 from core.logging_service import logger
 from core.deps import templates
+from core.rate_limit import RateLimitMiddleware
 from utils.helpers import time_duration
 from services import cms_gateway, vod_service
 
@@ -37,6 +38,9 @@ async def lifespan(app: FastAPI):
     logger.info("HTTP client closed")
 
 app = FastAPI(title="MundoGo-Plus Orchestrator", lifespan=lifespan)
+
+# Rate limiting: 60 requests/minute por IP
+app.add_middleware(RateLimitMiddleware, requests_per_minute=60)
 
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
@@ -70,4 +74,11 @@ app.include_router(health_router)
 async def http_exception_handler(request, exc):
     if exc.status_code == 401:
         return RedirectResponse("/login", status_code=303)
-    return JSONResponse(content={"detail": exc.detail}, status_code=exc.status_code)
+    return JSONResponse(
+        content={
+            "success": False,
+            "error": exc.detail,
+            "status_code": exc.status_code
+        },
+        status_code=exc.status_code
+    )

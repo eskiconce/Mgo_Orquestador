@@ -1,5 +1,13 @@
 # Changelog — Encoder Orchestrator
 
+## v2.13.0 (28 Aug 2026) — Fase 5: Seguridad
+
+- Fix: endpoints internos (`analyze-callback`, `trigger-failover`) ahora requieren `X-API-Key`
+- Nuevo: `core/errors.py` — esquema de error unificado (`ErrorResponse`, `SuccessResponse`)
+- Nuevo: `core/rate_limit.py` — rate limiting por IP (60 req/min)
+- Fix: exception handler devuelve JSON consistente `{"success": false, "error": ..., "status_code": ...}`
+- OpenSpec: change `fase-5-seguridad`
+
 ## v2.12.0 (28 Aug 2026) — Fase 4: Testing
 
 - Nuevo: `tests/` — framework de tests con pytest

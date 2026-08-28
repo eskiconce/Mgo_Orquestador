@@ -1,6 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException, Body
+from fastapi import APIRouter, Depends, HTTPException, Body, Header
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
+from typing import Optional
 import base64, zlib, httpx
 
 import models
@@ -15,8 +16,14 @@ from routers.orchestrator import analyze_tasks
 router = APIRouter(tags=["internal"])
 
 
+def verify_api_key(x_api_key: Optional[str] = Header(None)):
+    """Verifica X-API-Key para endpoints internos."""
+    if x_api_key != AGENT_API_KEY:
+        raise HTTPException(status_code=401, detail="API key inválida")
+
+
 @router.post("/api/internal/analyze-callback")
-async def analyze_callback(data: dict = Body(...)):
+async def analyze_callback(data: dict = Body(...), _: None = Depends(verify_api_key)):
     task_id = data.get("task_id")
     if not task_id or task_id not in analyze_tasks:
         raise HTTPException(404, "Task no encontrada")
@@ -35,7 +42,7 @@ async def analyze_status(task_id: str, current_user: models.User = Depends(get_c
 
 
 @router.post("/api/internal/trigger-failover/{channel_id}")
-async def trigger_failover(channel_id: int, mode: str = "activate", db: Session = Depends(get_db)):
+async def trigger_failover(channel_id: int, mode: str = "activate", db: Session = Depends(get_db), _: None = Depends(verify_api_key)):
     channel = db.query(models.Channel).filter(models.Channel.id == channel_id).first()
     jobs = db.query(models.EncodingJob).filter(models.EncodingJob.channel_id == channel_id, models.EncodingJob.node_id.in_(db.query(models.Node.id).filter(models.Node.tipo == 'Packager'))).all()
     for job in jobs:
