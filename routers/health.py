@@ -3,6 +3,7 @@ Router de salud y métricas del orquestador.
 """
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
+from sqlalchemy import text
 from datetime import datetime
 import time
 
@@ -25,7 +26,7 @@ def health_check(db: Session = Depends(get_db)):
     # Check DB
     db_ok = False
     try:
-        db.execute("SELECT 1")
+        db.execute(text("SELECT 1"))
         db_ok = True
     except Exception:
         pass
@@ -62,7 +63,7 @@ def health_check(db: Session = Depends(get_db)):
 def readiness_check(db: Session = Depends(get_db)):
     """Readiness probe — responde 200 solo si DB está OK."""
     try:
-        db.execute("SELECT 1")
+        db.execute(text("SELECT 1"))
         return {"ready": True}
     except Exception:
         return {"ready": False}
