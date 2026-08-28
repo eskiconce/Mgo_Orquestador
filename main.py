@@ -22,6 +22,7 @@ from routers.drm import router as drm_router
 from routers.orchestrator import router as orchestrator_router
 from routers.internal import router as internal_router
 from routers.ui_logs import router as ui_logs_router
+from routers.health import router as health_router
 
 # --- HTTP Client Singleton ---
 http_client: httpx.AsyncClient = None
@@ -62,6 +63,7 @@ app.include_router(drm_router)
 app.include_router(orchestrator_router)
 app.include_router(internal_router)
 app.include_router(ui_logs_router)
+app.include_router(health_router)
 
 # --- Exception handler ---
 @app.exception_handler(HTTPException)

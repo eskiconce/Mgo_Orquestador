@@ -1,5 +1,14 @@
 # Changelog — Encoder Orchestrator
 
+## v2.11.0 (28 Aug 2026) — Fase 3: Observabilidad
+
+- Nuevo: `GET /api/health` — health check con versión, DB, uptime, métricas de jobs/nodos/canales
+- Nuevo: `GET /api/health/ready` — readiness probe (200 si DB OK)
+- Nuevo: `GET /api/metrics` — métricas detalladas (jobs por estado/tipo, nodos por tipo/estado, canales con/sin encoder)
+- Nuevo: `core/logging_service.py` — soporte para JSON format via `LOG_FORMAT=json`
+- Nuevo: `routers/health.py` — router de salud y métricas
+- OpenSpec: change `fase-3-observabilidad`
+
 ## v2.10.0 (28 Aug 2026) — Fase 2: Modularización
 
 - Nuevo: `routers/` — main.py dividido en 10 routers por dominio (auth, users, dashboard, nodes, channels, processes, drm, orchestrator, internal, ui_logs)
