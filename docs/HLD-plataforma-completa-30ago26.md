@@ -20,7 +20,7 @@ El orquestador actual (`Mgo_Orquestador`) gestiona encoders y packagers. La plat
 | **Agent Mac** | Python FastAPI + ProcessManager | 8000 | 172.16.223.8/10, 192.168.8.33 |
 | **Agent Linux** | Python FastAPI + systemd | 8000 | 172.16.222.233/235 |
 | **Api_Origins** | Python FastAPI + systemd | 8000 | 172.16.222.246/248/250 |
-| **Widevine Server** | Java 11 + Redis + MySQL | 8080 | 172.16.222.240 |
+| **Widevine Server** | Java 11 + Redis + MySQL | 8080 | 172.16.222.241 |
 | **Mgo_ApiKMS** | Python FastAPI + Redis + MySQL | 8000 | 172.16.222.240 |
 | **TsMonitor** | Python Flask + SQLite/MySQL + InfluxDB | 5000 | (verificar) |
 | **HAProxy** | HAProxy + custom agent | 8002 | 172.16.223.240/242/244/246 |
@@ -47,16 +47,16 @@ El orquestador actual (`Mgo_Orquestador`) gestiona encoders y packagers. La plat
         │             │            │          │
    ┌────┴────┐   ┌────┴────┐  ┌───┴───┐  ┌───┴───┐
    │ HTTP    │   │ HTTP    │  │ MySQL │  │ Redis │
-   │ agents  │   │ DRM     │  │       │  │       │
+   │ agents  │   │ DRM/KMS │  │       │  │       │
    └────┬────┘   └────┬────┘  └───────┘  └───────┘
         │             │
-   ┌────▼────┐   ┌────▼────────────────────┐
-   │ Agents  │   │ DRM Stack (172.16.222.240)│
-   │ Mac/Linux│  │ ┌──────────┐ ┌─────────┐│
-   │ Origins │   │ │ Widevine │ │ ApiKMS  ││
-   └─────────┘   │ │ (Java)   │ │(Python) ││
-                 │ └──────────┘ └─────────┘│
-                 └─────────────────────────┘
+   ┌────▼────┐   ┌────▼───────────────────────────┐
+   │ Agents  │   │ DRM Stack (servidores separados)│
+   │ Mac/Linux│  │ ┌───────────┐   ┌───────────┐  │
+   │ Origins │   │ │ Widevine  │   │ ApiKMS    │  │
+   └─────────┘   │ │ .241:8080 │   │ .240:8000 │  │
+                 │ └───────────┘   └───────────┘  │
+                 └────────────────────────────────┘
 ```
 
 ### 3.1 Lo que YA está integrado
@@ -189,7 +189,7 @@ El orquestador actual (`Mgo_Orquestador`) gestiona encoders y packagers. La plat
 | `monitor_logs` | ~50k | Eventos del monitor |
 | `packager_logs` | ~10k | Logs de packager |
 
-### 6.2 drm_system (MySQL en 172.16.222.240)
+### 6.2 drm_system (MySQL en 172.16.222.241 — DRM Server)
 
 | Tabla | Propósito |
 |-------|-----------|
@@ -197,7 +197,7 @@ El orquestador actual (`Mgo_Orquestador`) gestiona encoders y packagers. La plat
 | `vip_users` | Usuarios VIP (user_id, username, max_screens, status) |
 | `license_activity` | Historial de licencias (user_id, kid, action, ip) |
 
-### 6.3 Redis (172.16.222.240)
+### 6.3 Redis (172.16.222.241 — DRM Server)
 
 | Key Pattern | TTL | Propósito |
 |-------------|-----|-----------|
@@ -222,24 +222,30 @@ El orquestador actual (`Mgo_Orquestador`) gestiona encoders y packagers. La plat
 | `/encoder/analyze` | POST | X-API-Key (Mac) | Análisis de señal |
 | `/encoder/build` | POST | X-API-Key (Mac) | Build FFmpeg script |
 
-### 7.2 Orquestador → DRM/KMS
+### 7.2 Orquestador → DRM (172.16.222.241)
 
 | Endpoint | Método | Puerto | Uso |
 |----------|--------|--------|-----|
-| `{drm_ip}:8080/health` | GET | 8080 | Health check DRM |
-| `{drm_ip}:8080/stats` | GET | 8080 | Stats DRM (users/devices) |
-| `{kms_ip}:8000/kms/generate` | POST | 8000 | Generar content key |
-| `{kms_ip}:8000/api/keys/rotate` | POST | 8000 | Rotar key |
-| `{kms_ip}:8000/api/keys` | GET | 8000 | Listar keys |
-| `{kms_ip}:8000/api/vip/users` | GET | 8000 | Listar usuarios VIP |
+| `172.16.222.241:8080/health` | GET | 8080 | Health check DRM |
+| `172.16.222.241:8080/stats` | GET | 8080 | Stats DRM (users/devices) |
+| `172.16.222.241:8080/stats/user/{id}` | GET | 8080 | Stats por usuario |
 
-### 7.3 Orquestador → HAProxy
+### 7.3 Orquestador → KMS (172.16.222.240)
+
+| Endpoint | Método | Puerto | Uso |
+|----------|--------|--------|-----|
+| `172.16.222.240:8000/kms/generate` | POST | 8000 | Generar content key |
+| `172.16.222.240:8000/api/keys/rotate` | POST | 8000 | Rotar key |
+| `172.16.222.240:8000/api/keys` | GET | 8000 | Listar keys |
+| `172.16.222.240:8000/api/vip/users` | GET | 8000 | Listar usuarios VIP |
+
+### 7.4 Orquestador → HAProxy
 
 | Endpoint | Método | Puerto | Uso |
 |----------|--------|--------|-----|
 | `{haproxy_ip}:8002/update-map` | POST | 8002 | Actualizar mapa de rutas |
 
-### 7.4 CMS → Orquestador
+### 7.5 CMS → Orquestador
 
 | Endpoint | Método | Uso |
 |----------|--------|-----|
@@ -250,7 +256,7 @@ El orquestador actual (`Mgo_Orquestador`) gestiona encoders y packagers. La plat
 
 ## 8. Gap Analysis
 
-### 8.1 DRM
+### 8.1 DRM (172.16.222.241)
 
 | Aspecto | Actual | Objetivo | Gap |
 |---------|--------|----------|-----|
@@ -262,7 +268,7 @@ El orquestador actual (`Mgo_Orquestador`) gestiona encoders y packagers. La plat
 | Key rotation | ⚠️ Manual via KMS | Automático con alerta | Medio |
 | Failover automático | ❌ | Auto-switch a backup | **Alto** |
 
-### 8.2 KMS
+### 8.2 KMS (172.16.222.240)
 
 | Aspecto | Actual | Objetivo | Gap |
 |---------|--------|----------|-----|
@@ -311,7 +317,7 @@ El orquestador actual (`Mgo_Orquestador`) gestiona encoders y packagers. La plat
 | A3 | Auth en Linux agent `/encoder/analyze` | Ninguna |
 | A4 | Fix deploy.sh `--diff-filter=AM` | Ninguna |
 
-### Fase B: DRM — HA + 500k (v2.16.0) — ~28h
+### Fase B: DRM (172.16.222.241) — HA + 500k (v2.16.0) — ~28h
 
 | # | Tarea | Dependencias |
 |---|-------|--------------|
@@ -322,7 +328,7 @@ El orquestador actual (`Mgo_Orquestador`) gestiona encoders y packagers. La plat
 | B5 | Rotación automática de keys con notificación | B2 |
 | B6 | Alertas expiración licencias DRM | B1 |
 
-### Fase C: KMS — HA + 500k (v2.17.0) — ~26h
+### Fase C: KMS (172.16.222.240) — HA + 500k (v2.17.0) — ~26h
 
 | # | Tarea | Dependencias |
 |---|-------|--------------|
@@ -384,8 +390,8 @@ A (Consolidar) ──► B (DRM) ──────────┐
 | Fase | Versión | Descripción | Esfuerzo |
 |------|---------|-------------|----------|
 | A | v2.15.0 | Consolidar existente | ~7h |
-| B | v2.16.0 | DRM: HA + 500k | ~28h |
-| C | v2.17.0 | KMS: HA + 500k | ~26h |
+| **Fase B** | v2.16.0 | DRM (172.16.222.241): HA + 500k | ~28h |
+| **Fase C** | v2.17.0 | KMS (172.16.222.240): HA + 500k | ~26h |
 | D | v2.18.0 | Origins / CDN | ~17h |
 | E | v2.19.0 | HAProxy: Dashboard | ~13h |
 | F | v2.20.0 | Observabilidad unificada | ~30h |
@@ -397,8 +403,8 @@ A (Consolidar) ──► B (DRM) ──────────┐
 
 | Riesgo | Impacto | Mitigación |
 |--------|---------|------------|
-| DRM/KMS HA requiere cambio de infra | Alto | Diseñar con abort/fallback a standalone |
-| 500k peticiones necesita load balancer | Alto | Evaluar HAProxy como LB para DRM/KMS |
+| DRM/KMS HA requiere cambio de infra | Alto | DRM (.241) y KMS (.240) son independientes — diseñar HA por separado |
+| 500k peticiones necesita load balancer | Alto | Evaluar HAProxy como LB para DRM (.241) y KMS (.240) independientemente |
 | TsMonitor es monolito (9200 líneas) | Medio | No refactorizar, solo integrar vía API |
 | Agents Mac/Linux se desincronizan | Medio | Canonical = signal_analyzer.py del orquestador |
 | CMS es externo y no controlamos cambios | Bajo | Mantener API contract documentado |
