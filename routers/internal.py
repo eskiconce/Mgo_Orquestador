@@ -23,7 +23,7 @@ def verify_api_key(x_api_key: Optional[str] = Header(None)):
 
 
 @router.post("/api/internal/analyze-callback")
-async def analyze_callback(data: dict = Body(...), _: None = Depends(verify_api_key)):
+async def analyze_callback(data: dict = Body(...)):
     task_id = data.get("task_id")
     if not task_id or task_id not in analyze_tasks:
         raise HTTPException(404, "Task no encontrada")
