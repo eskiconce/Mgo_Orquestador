@@ -162,6 +162,7 @@ async def analyze_encoder_source(data: dict = Body(...), db: Session = Depends(g
         "audio_mapping": channel.audio_mapping or "0:a:0",
         "gop_p1": int(channel.gop_p1 or 60), "gop_p2": int(channel.gop_p2 or 60),
         "callback_url": f"http://172.16.223.5:9000/api/internal/analyze-callback",
+        "restart_callback_url": f"http://172.16.223.5:9000/api/internal/encoder-restart",
         "task_id": task_id
     }
     try:

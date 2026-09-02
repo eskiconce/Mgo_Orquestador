@@ -89,3 +89,35 @@ async def trigger_failover(channel_id: int, mode: str = "activate", db: Session 
     db.commit()
     sync_haproxy_map(db)
     return {"status": "done"}
+
+
+@router.post("/api/internal/encoder-restart")
+async def notify_encoder_restart(data: dict = Body(...), db: Session = Depends(get_db)):
+    """Notificación del encoder cuando reinicia FFmpeg internamente (ej: por discontinuidades)."""
+    channel_name = data.get("channel_name")
+    reason = data.get("reason", "unknown")
+    if not channel_name:
+        raise HTTPException(400, "channel_name requerido")
+
+    job = db.query(models.EncodingJob).join(models.Channel).filter(
+        models.Channel.channel_name == channel_name,
+        models.EncodingJob.status == "running",
+        models.EncodingJob.node_id.isnot(None)
+    ).first()
+
+    if not job:
+        logger.warning(f"encoder-restart: no se encontró job activo para canal {channel_name}")
+        return {"status": "no_active_job"}
+
+    job.started_at = datetime.now()
+    db.commit()
+
+    log_msg = f"Encoder reiniciado: canal={channel_name}, razón={reason}, job={job.id}"
+    logger.info(log_msg)
+    try:
+        from utils.helpers import log_monitor_event
+        log_monitor_event(db, "ENCODER_RESTART", log_msg, job.node_id)
+    except Exception:
+        pass
+
+    return {"status": "ok", "job_id": job.id, "channel_name": channel_name}

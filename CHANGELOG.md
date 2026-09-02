@@ -1,5 +1,14 @@
 # Changelog — Encoder Orchestrator
 
+## v2.16.0 (02 Sep 2026) — Issue #2: Restart callback para discontinuidades
+
+- Nuevo: endpoint `POST /api/internal/encoder-restart` — recibe notificación del encoder al reiniciar FFmpeg
+- Nuevo: `signal_analyzer.py` acepta `--restart-callback-url` y lo incluye en el script generado
+- Fix: cuando encoder reinicia por discontinuidades (>20), ahora notifica al orquestador
+- Fix: orquestador actualiza `started_at` del job → `check_and_heal_children()` resync el packager
+- Orchestrator envía `restart_callback_url` junto con `callback_url` al iniciar análisis
+- OpenSpec: change `issue-2-restart-callback`
+
 ## v2.15.0 (02 Sep 2026) — Issue #1: Mejoras post-plan
 
 - Fix: `deploy.sh` ahora detecta archivos nuevos (`--diff-filter=AM`)

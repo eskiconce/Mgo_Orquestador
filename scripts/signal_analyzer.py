@@ -559,7 +559,7 @@ def print_analysis_summary(analysis):
 # FASE 2: GENERADOR DE SCRIPT DE ENCODING
 # ============================================================
 
-def generate_encoder_script(analysis, source_url, local_ip, dest_p1, dest_p4, output_path=SCRIPT_OUTPUT, burn_subtitles=False, service_id=None, service_name=None, gop_p1=60, audio_mapping="0:a:0"):
+def generate_encoder_script(analysis, source_url, local_ip, dest_p1, dest_p4, output_path=SCRIPT_OUTPUT, burn_subtitles=False, service_id=None, service_name=None, gop_p1=60, audio_mapping="0:a:0", restart_callback_url=None):
     """Genera el script de encoding basado en el analisis y la plataforma."""
     
     recs = {r["category"]: r["value"] for r in analysis.get("recommendations", [])}
@@ -707,6 +707,9 @@ import subprocess
 import sys
 import time
 import signal
+import os
+
+RESTART_CALLBACK_URL = {f'"{restart_callback_url}"' if restart_callback_url else 'None'}
 
 
 keep_running = True
@@ -717,8 +720,23 @@ def handle_termination_signal(signum, frame):
     global keep_running, ffmpeg_process
     print("\\n[Orquestador] Senal de apagado recibida. Deteniendo el flujo de manera segura...")
     keep_running = False
-    if ffmpeg_process and ffmpeg_process.poll() is None:
+    if ffmpeg_process:
         ffmpeg_process.terminate()
+
+
+def notify_orchestrator_restart(channel_name, reason="discontinuity"):
+    """Notifica al orquestador que FFmpeg fue reiniciado."""
+    if not RESTART_CALLBACK_URL:
+        return
+    try:
+        import urllib.request
+        import json
+        payload = json.dumps({"channel_name": channel_name, "reason": reason}).encode('utf-8')
+        req = urllib.request.Request(RESTART_CALLBACK_URL, data=payload, headers={"Content-Type": "application/json"})
+        urllib.request.urlopen(req, timeout=5)
+        print(f"[Orquestador] Callback de reinicio enviado: {reason}")
+    except Exception as e:
+        print(f"[Orquestador] Warning: no se pudo enviar callback de reinicio: {e}")
 
 
 def run_transcoder():
@@ -840,6 +858,7 @@ def run_transcoder():
             print(f"[Orquestador] Error al invocar el binario: {{e}}")
         
         if keep_running:
+            notify_orchestrator_restart("{service_name or 'unknown'}", "discontinuity")
             print("[Orquestador] Levantando servicio nuevamente en 5 segundos...\\n")
             time.sleep(5)
         else:
@@ -890,6 +909,7 @@ Opciones:
   --service-name=X    Nombre del canal/servicio (ej: "Canal 13 HD")
   --gop-p1=N          GOP para ambos perfiles (default: 60)
   --audio-mapping=X   Mapeo de audio FFmpeg (default: "0:a:0")
+  --restart-callback-url=X  URL de callback para notificar reinicios FFmpeg
 
 Ejemplo:
   python3 signal_analyzer.py udp://226.0.0.26:1026 10.0.10.10 238.0.0.130
@@ -912,6 +932,7 @@ Ejemplo:
     
     gop_p1 = 60  # Default
     audio_mapping = "0:a:0"  # Default
+    restart_callback_url = None  # Default
     
     for arg in sys.argv:
         if arg.startswith("--duration="):
@@ -924,6 +945,8 @@ Ejemplo:
             gop_p1 = int(arg.split("=")[1])
         elif arg.startswith("--audio-mapping="):
             audio_mapping = arg.split("=", 1)[1]
+        elif arg.startswith("--restart-callback-url="):
+            restart_callback_url = arg.split("=", 1)[1]
     
     # Calcular puertos destino
     port_match = re.search(r':(\d+)', source_url.split("://")[1] if "://" in source_url else source_url)
@@ -990,7 +1013,8 @@ Ejemplo:
             service_id=service_id,
             service_name=service_name,
             gop_p1=gop_p1,
-            audio_mapping=audio_mapping
+            audio_mapping=audio_mapping,
+            restart_callback_url=restart_callback_url
         )
         
         print(f"\n{C.GREEN}Script generado: {script_path}{C.END}")
