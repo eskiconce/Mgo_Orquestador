@@ -4,6 +4,7 @@ Rate limiting simple por IP para endpoints sensibles.
 import time
 from collections import defaultdict
 from fastapi import Request, HTTPException
+from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
 
 
