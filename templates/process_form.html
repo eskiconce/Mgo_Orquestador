@@ -491,7 +491,7 @@
     }
   }
 
-  // 7B-2. Analizador de Señal (modo async con polling)
+  // 7B-2. Analizador de Señal (modo async con polling + retry)
   async function analyzeSignal() {
     if (!selectedNodeId || !channelSelect.value) {
       alert("Seleccione primero un canal y un encoder.");
@@ -512,128 +512,143 @@
     progressBar.classList.remove('bg-danger');
     progressBar.classList.add('progress-bar-animated');
 
-    try {
-      // 1. Enviar solicitud al orquestador (no bloquea)
-      const resp = await fetch('/orchestrator/encoder/analyze', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          channel_id: parseInt(channelSelect.value),
-          node_id: selectedNodeId,
-          duration: duration
-        })
-      });
+    const MAX_RETRIES = 2;
+    let attempt = 0;
 
-      if (!resp.ok) {
-        const err = await resp.json().catch(() => ({}));
-        throw new Error(err.detail || `Error HTTP ${resp.status}`);
-      }
+    async function runAnalysis() {
+      attempt++;
+      const suffix = attempt > 1 ? ` (intento ${attempt}/${MAX_RETRIES + 1})` : '';
 
-      const initData = await resp.json();
-      if (initData.status === 'error') {
-        throw new Error(initData.error || 'Error iniciando análisis');
-      }
+      try {
+        const resp = await fetch('/orchestrator/encoder/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            channel_id: parseInt(channelSelect.value),
+            node_id: selectedNodeId,
+            duration: duration
+          })
+        });
 
-      const taskId = initData.task_id;
-      btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Analizando...';
-      statusText.textContent = `Análisis en progreso... (task: ${taskId})`;
-
-      // 2. Polling del resultado
-      let elapsed = 0;
-      const maxWait = duration + 120; // máximo tiempo de espera
-      const pollInterval = 3000; // cada 3 segundos
-
-      const countdown = setInterval(() => {
-        elapsed++;
-        const pct = Math.min(95, Math.round(elapsed / maxWait * 100));
-        progressBar.style.width = pct + '%';
-        progressBar.textContent = pct + '%';
-        const remaining = Math.max(0, maxWait - elapsed);
-        statusText.textContent = `Analizando señal en encoder... ${elapsed}s (máx ~${maxWait}s)`;
-      }, 1000);
-
-      const poll = setInterval(async () => {
-        try {
-          const statusResp = await fetch(`/api/internal/analyze-status/${taskId}`);
-          if (!statusResp.ok) {
-            clearInterval(poll);
-            clearInterval(countdown);
-            throw new Error('Error consultando estado del análisis');
-          }
-
-          const statusData = await statusResp.json();
-
-          if (statusData.status === 'completed') {
-            clearInterval(poll);
-            clearInterval(countdown);
-
-            // Colocar script en textarea
-            document.getElementById('commandInput').value = statusData.script || '';
-
-            // Mostrar resumen
-            progressBar.style.width = '100%';
-            progressBar.textContent = '100%';
-            progressBar.classList.remove('progress-bar-animated');
-
-            const analysis = statusData.analysis || {};
-            const video = analysis.video || {};
-            const quality = analysis.quality || {};
-            const warnings = analysis.warnings || [];
-            const recs = analysis.recommendations || [];
-
-            let summary = `<span class="text-success fw-bold">✓ Análisis completado</span><br>`;
-            summary += `<strong>Video:</strong> ${video.codec || '?'} ${video.width || '?'}x${video.height || '?'} ${video.fps_eval || '?'}fps`;
-            if (video.interlaced) summary += ` <span class="badge bg-warning">Interlaced ${video.interlace_type || ''}</span>`;
-            summary += `<br>`;
-            summary += `<strong>Frames:</strong> ${quality.frames_total || 0} | <strong>Discontinuidades:</strong> ${quality.discontinuity_count || 0} | <strong>Decode errors:</strong> ${quality.decode_errors || 0}<br>`;
-
-            if (warnings.length > 0) {
-              summary += `<span class="text-danger"><strong>Warnings:</strong></span><br>`;
-              warnings.forEach(w => {
-                summary += `<span class="text-${w.level === 'HIGH' ? 'danger' : 'warning'}">• ${w.message}</span><br>`;
-              });
-            }
-
-            if (recs.length > 0) {
-              summary += `<strong>Recomendaciones:</strong><br>`;
-              recs.forEach(r => {
-                summary += `<span class="text-info">[${r.category}]</span> ${r.value} — ${r.reason}<br>`;
-              });
-            }
-
-            statusText.innerHTML = summary;
-            btn.disabled = false;
-            btn.innerHTML = '<i class="fas fa-search me-2"></i>Analizar Señal';
-
-          } else if (statusData.status === 'error') {
-            clearInterval(poll);
-            clearInterval(countdown);
-            throw new Error(statusData.error || 'Error en el análisis');
-          }
-          // Si status es "pending" o "running", continuar polling
-
-        } catch (pollErr) {
-          clearInterval(poll);
-          clearInterval(countdown);
-          progressBar.classList.remove('progress-bar-animated');
-          progressBar.classList.add('bg-danger');
-          progressBar.style.width = '100%';
-          progressBar.textContent = 'Error';
-          statusText.innerHTML = `<span class="text-danger fw-bold">✗ Error: ${pollErr.message}</span>`;
-          btn.disabled = false;
-          btn.innerHTML = '<i class="fas fa-search me-2"></i>Analizar Señal';
+        if (!resp.ok) {
+          const err = await resp.json().catch(() => ({}));
+          throw new Error(err.detail || `Error HTTP ${resp.status}`);
         }
-      }, pollInterval);
 
-    } catch (e) {
-      progressBar.classList.remove('progress-bar-animated');
-      progressBar.classList.add('bg-danger');
-      progressBar.style.width = '100%';
-      progressBar.textContent = 'Error';
-      statusText.innerHTML = `<span class="text-danger fw-bold">✗ Error: ${e.message}</span>`;
-      btn.disabled = false;
-      btn.innerHTML = '<i class="fas fa-search me-2"></i>Analizar Señal';
+        const initData = await resp.json();
+        if (initData.status === 'error') {
+          throw new Error(initData.error || 'Error iniciando análisis');
+        }
+
+        const taskId = initData.task_id;
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span>Analizando...' + suffix;
+        statusText.textContent = `Análisis en progreso... (task: ${taskId})${suffix}`;
+
+        let elapsed = 0;
+        const maxWait = duration + 120;
+        const pollInterval = 3000;
+
+        const countdown = setInterval(() => {
+          elapsed++;
+          const remaining = Math.max(0, maxWait - elapsed);
+          const pct = Math.min(95, Math.round(elapsed / maxWait * 100));
+          progressBar.style.width = pct + '%';
+          progressBar.textContent = `${pct}% — ${remaining}s restantes`;
+          statusText.textContent = `Analizando señal en encoder... ${elapsed}s / ~${maxWait}s${suffix}`;
+        }, 1000);
+
+        const result = await new Promise((resolve, reject) => {
+          const poll = setInterval(async () => {
+            try {
+              const statusResp = await fetch(`/api/internal/analyze-status/${taskId}`);
+              if (!statusResp.ok) {
+                clearInterval(poll);
+                clearInterval(countdown);
+                reject(new Error('Error consultando estado del análisis'));
+                return;
+              }
+
+              const statusData = await statusResp.json();
+
+              if (statusData.status === 'completed') {
+                clearInterval(poll);
+                clearInterval(countdown);
+                resolve(statusData);
+              } else if (statusData.status === 'error') {
+                clearInterval(poll);
+                clearInterval(countdown);
+                reject(new Error(statusData.error || 'Error en el análisis'));
+              }
+            } catch (pollErr) {
+              clearInterval(poll);
+              clearInterval(countdown);
+              reject(pollErr);
+            }
+          }, pollInterval);
+
+          setTimeout(() => {
+            clearInterval(poll);
+            reject(new Error('Timeout: análisis no completó en el tiempo esperado'));
+          }, (maxWait + 30) * 1000);
+        });
+
+        // Éxito
+        document.getElementById('commandInput').value = result.script || '';
+        progressBar.style.width = '100%';
+        progressBar.textContent = '100%';
+        progressBar.classList.remove('progress-bar-animated');
+
+        const analysis = result.analysis || {};
+        const video = analysis.video || {};
+        const quality = analysis.quality || {};
+        const warnings = analysis.warnings || [];
+        const recs = analysis.recommendations || [];
+
+        let summary = `<span class="text-success fw-bold">✓ Análisis completado</span><br>`;
+        summary += `<strong>Video:</strong> ${video.codec || '?'} ${video.width || '?'}x${video.height || '?'} ${video.fps_eval || '?'}fps`;
+        if (video.interlaced) summary += ` <span class="badge bg-warning">Interlaced ${video.interlace_type || ''}</span>`;
+        summary += `<br>`;
+        summary += `<strong>Frames:</strong> ${quality.frames_total || 0} | <strong>Discontinuidades:</strong> ${quality.discontinuity_count || 0} | <strong>Decode errors:</strong> ${quality.decode_errors || 0}<br>`;
+
+        if (warnings.length > 0) {
+          summary += `<span class="text-danger"><strong>Warnings:</strong></span><br>`;
+          warnings.forEach(w => {
+            summary += `<span class="text-${w.level === 'HIGH' ? 'danger' : 'warning'}">• ${w.message}</span><br>`;
+          });
+        }
+
+        if (recs.length > 0) {
+          summary += `<strong>Recomendaciones:</strong><br>`;
+          recs.forEach(r => {
+            summary += `<span class="text-info">[${r.category}]</span> ${r.value} — ${r.reason}<br>`;
+          });
+        }
+
+        statusText.innerHTML = summary;
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-search me-2"></i>Analizar Señal';
+
+      } catch (e) {
+        if (attempt <= MAX_RETRIES) {
+          statusText.textContent = `Error: ${e.message}. Reintentando (${attempt}/${MAX_RETRIES + 1})...`;
+          progressBar.classList.add('bg-warning');
+          progressBar.classList.remove('bg-danger');
+          await new Promise(r => setTimeout(r, 3000));
+          progressBar.classList.remove('bg-warning');
+          return runAnalysis();
+        }
+
+        progressBar.classList.remove('progress-bar-animated');
+        progressBar.classList.add('bg-danger');
+        progressBar.style.width = '100%';
+        progressBar.textContent = 'Error';
+        statusText.innerHTML = `<span class="text-danger fw-bold">✗ Error tras ${attempt} intentos: ${e.message}</span>`;
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-search me-2"></i>Analizar Señal';
+      }
     }
+
+    await runAnalysis();
   }
 
   // 7C. Generador de Script PACKAGER

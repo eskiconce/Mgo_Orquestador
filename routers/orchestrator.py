@@ -141,7 +141,18 @@ async def analyze_encoder_source(data: dict = Body(...), db: Session = Depends(g
     if duration < 60 or duration > 600:
         raise HTTPException(400, "Duración debe ser entre 60 y 600 segundos")
     task_id = f"analyze_{channel.channel_name}_{node.id}_{int(datetime.datetime.now().timestamp())}"
-    analyze_tasks[task_id] = {"status": "pending", "script": "", "analysis": {}, "error": "", "channel_name": channel.channel_name, "started_at": datetime.datetime.now().isoformat()}
+    analyze_tasks[task_id] = {"status": "pending", "script": "", "analysis": {}, "error": "", "channel_name": channel.channel_name, "channel_id": channel.id, "node_id": node.id, "duration": duration, "started_at": datetime.datetime.now().isoformat()}
+
+    # Guardar registro inicial en BD
+    try:
+        record = models.SignalAnalysis(
+            channel_id=channel.id, node_id=node.id, task_id=task_id,
+            status="pending", duration=duration, started_at=datetime.datetime.now()
+        )
+        db.add(record)
+        db.commit()
+    except Exception as e:
+        logger.warning(f"Error creando registro de análisis: {e}")
     payload = {
         "source_url": source_url, "local_ip": node.ip_multicast, "dest_multicast_base": dest_base,
         "duration": duration, "p1_port": channel.port_1080p, "p4_port": channel.port_480p,

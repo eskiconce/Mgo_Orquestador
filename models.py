@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, Text, ForeignKey, DateTime, Float, DECIMAL, Enum
+from sqlalchemy import Column, Integer, String, Boolean, Text, ForeignKey, DateTime, Float, DECIMAL, Enum, JSON
 from sqlalchemy.orm import relationship, backref
 from database import Base
 from datetime import datetime
@@ -252,5 +252,25 @@ class PackagerLog(Base):
     created_at = Column(DateTime, default=datetime.now)
 
     # Relación para extraer propiedades del servidor fácilmente si es necesario
+    node = relationship("Node")
+
+
+class SignalAnalysis(Base):
+    __tablename__ = "signal_analyses"
+
+    id = Column(Integer, primary_key=True, index=True)
+    channel_id = Column(Integer, ForeignKey("channels.id"), nullable=False)
+    node_id = Column(Integer, ForeignKey("nodos.id"), nullable=False)
+    task_id = Column(String(200), unique=True, index=True)
+    status = Column(String(50), default="pending")  # pending, running, completed, error
+    duration = Column(Integer, default=300)
+    analysis = Column(JSON, nullable=True)
+    script = Column(Text, nullable=True)
+    error = Column(Text, nullable=True)
+    started_at = Column(DateTime, nullable=True)
+    completed_at = Column(DateTime, nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+
+    channel = relationship("Channel")
     node = relationship("Node")
 

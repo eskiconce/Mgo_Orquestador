@@ -2,6 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException, Body, Header
 from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 from typing import Optional
+from datetime import datetime
 import base64, zlib, httpx
 
 import models
@@ -23,13 +24,40 @@ def verify_api_key(x_api_key: Optional[str] = Header(None)):
 
 
 @router.post("/api/internal/analyze-callback")
-async def analyze_callback(data: dict = Body(...)):
+async def analyze_callback(data: dict = Body(...), db: Session = Depends(get_db)):
     task_id = data.get("task_id")
     if not task_id or task_id not in analyze_tasks:
         raise HTTPException(404, "Task no encontrada")
     analyze_tasks[task_id]["status"] = "completed"
     analyze_tasks[task_id]["script"] = data.get("script", "")
     analyze_tasks[task_id]["analysis"] = data.get("analysis", {})
+
+    # Guardar historial en BD
+    try:
+        task_info = analyze_tasks[task_id]
+        existing = db.query(models.SignalAnalysis).filter(models.SignalAnalysis.task_id == task_id).first()
+        if existing:
+            existing.status = "completed"
+            existing.script = data.get("script", "")
+            existing.analysis = data.get("analysis", {})
+            existing.completed_at = datetime.now()
+        else:
+            record = models.SignalAnalysis(
+                channel_id=task_info.get("channel_id"),
+                node_id=task_info.get("node_id"),
+                task_id=task_id,
+                status="completed",
+                duration=task_info.get("duration", 300),
+                analysis=data.get("analysis", {}),
+                script=data.get("script", ""),
+                started_at=datetime.fromisoformat(task_info.get("started_at")) if task_info.get("started_at") else None,
+                completed_at=datetime.now()
+            )
+            db.add(record)
+        db.commit()
+    except Exception as e:
+        logger.warning(f"Error guardando historial de análisis: {e}")
+
     logger.info(f"Análisis completado: task={task_id}")
     return {"status": "ok"}
 

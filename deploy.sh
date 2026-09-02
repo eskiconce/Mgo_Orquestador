@@ -70,7 +70,7 @@ if [ -n "$1" ] && [ "$1" != "--all" ]; then
 else
     if git rev-parse --git-dir > /dev/null 2>&1; then
         FILES=()
-        while IFS= read -r line; do FILES+=("$line"); done < <(git diff --name-only --diff-filter=M HEAD -- '*.py' '*.html')
+        while IFS= read -r line; do FILES+=("$line"); done < <(git diff --name-only --diff-filter=AM HEAD -- '*.py' '*.html')
         if [ ${#FILES[@]} -eq 0 ]; then
             echo "⚠️ No hay archivos modificados según git."
             exit 1

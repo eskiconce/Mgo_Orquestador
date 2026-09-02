@@ -1,5 +1,15 @@
 # Changelog — Encoder Orchestrator
 
+## v2.15.0 (02 Sep 2026) — Issue #1: Mejoras post-plan
+
+- Fix: `deploy.sh` ahora detecta archivos nuevos (`--diff-filter=AM`)
+- Nuevo: countdown visible en barra de progreso de análisis de señal ("42s restantes")
+- Nuevo: retry automático de análisis (hasta 2 reintentos con 3s delay)
+- Nuevo: `SignalAnalysis` model — historial de análisis guardado en BD
+- Nuevo: endpoint `/api/internal/analyze-callback` guarda historial automáticamente
+- Nuevo: alerta Telegram cuando encoder se reinicia por discontinuity
+- OpenSpec: change `issue-1-mejoras`
+
 ## v2.14.0 (28 Aug 2026) — Fase 6: Deploy
 
 - Fix: eliminados `deploy.exp` y `deploy_file.exp` (scripts expect frágiles)

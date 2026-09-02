@@ -432,6 +432,7 @@ def check_timestamp_discontinuity(db, job, req_session):
         _prev_logs.pop(f"{prog_name}_err", None)
         log_monitor_event(db, "TIMESTAMP_DISCONTINUITY", f"Encoder {prog_name} reiniciado por timestamp discontinuity persistente ({elapsed:.0f}s).", job.node.id)
         notify_cms_channel_status(job.channel_id, "restart", f"Encoder reiniciado por discontinuity")
+        notify_telegram(f"⚠️ <b>Encoder reiniciado</b> por discontinuity\nCanal: <b>{job.channel.channel_name}</b>\nNodo: {job.node.hostname}\nTiempo: {elapsed:.0f}s")
         return True
     
     return False

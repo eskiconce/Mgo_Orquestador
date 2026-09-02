@@ -693,10 +693,11 @@ async function analyzeSignalFromModal() {
 
         const countdown = setInterval(() => {
             elapsed++;
+            const remaining = Math.max(0, maxWait - elapsed);
             const pct = Math.min(95, Math.round(elapsed / maxWait * 100));
             progressBar.style.width = pct + '%';
-            progressBar.textContent = pct + '%';
-            statusText.textContent = `Analizando señal en encoder... ${elapsed}s (máx ~${maxWait}s)`;
+            progressBar.textContent = `${pct}% — ${remaining}s restantes`;
+            statusText.textContent = `Analizando señal en encoder... ${elapsed}s / ~${maxWait}s`;
         }, 1000);
 
         const poll = setInterval(async () => {
