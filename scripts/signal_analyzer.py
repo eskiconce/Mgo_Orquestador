@@ -731,12 +731,12 @@ def notify_orchestrator_restart(channel_name, reason="discontinuity"):
     try:
         import urllib.request
         import json
-        payload = json.dumps({"channel_name": channel_name, "reason": reason}).encode('utf-8')
-        req = urllib.request.Request(RESTART_CALLBACK_URL, data=payload, headers={"Content-Type": "application/json"})
+        payload = json.dumps({{"channel_name": channel_name, "reason": reason}}).encode('utf-8')
+        req = urllib.request.Request(RESTART_CALLBACK_URL, data=payload, headers={{"Content-Type": "application/json"}})
         urllib.request.urlopen(req, timeout=5)
-        print(f"[Orquestador] Callback de reinicio enviado: {reason}")
+        print(f"[Orquestador] Callback de reinicio enviado: {{reason}}")
     except Exception as e:
-        print(f"[Orquestador] Warning: no se pudo enviar callback de reinicio: {e}")
+        print(f"[Orquestador] Warning: no se pudo enviar callback de reinicio: {{e}}")
 
 
 def run_transcoder():
