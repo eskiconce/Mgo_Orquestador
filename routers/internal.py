@@ -3,7 +3,7 @@ from fastapi.responses import HTMLResponse
 from sqlalchemy.orm import Session
 from typing import Optional
 from datetime import datetime
-import base64, zlib, httpx
+import base64, zlib, httpx, requests
 
 import models
 from database import get_db
@@ -119,5 +119,29 @@ async def notify_encoder_restart(data: dict = Body(...), db: Session = Depends(g
         log_monitor_event(db, "ENCODER_RESTART", log_msg, job.node_id)
     except Exception:
         pass
+
+    # Reiniciar packager asociado para resincronizar stream
+    try:
+        packager_job = db.query(models.EncodingJob).filter(
+            models.EncodingJob.parent_job_id == job.id,
+            models.EncodingJob.status == "running"
+        ).first()
+
+        if packager_job and packager_job.node:
+            prefix = "pkg"
+            prog_name = f"{prefix}_{packager_job.channel.channel_name}_{packager_job.id}"
+            url = f"http://{packager_job.node.ip_address}:{AGENT_PORT}/jobs/control"
+            resp = requests.post(url, params={"action": "restart", "program_name": prog_name},
+                                 headers={"X-API-Key": AGENT_API_KEY}, timeout=10)
+            if resp.status_code == 200:
+                packager_job.started_at = datetime.now()
+                db.commit()
+                pkg_msg = f"Packager {packager_job.id} reiniciado tras restart de encoder {channel_name}"
+                logger.info(pkg_msg)
+                log_monitor_event(db, "PACKAGER_RESTART", pkg_msg, packager_job.node_id)
+            else:
+                logger.warning(f"Packager restart falló: status={resp.status_code}")
+    except Exception as e:
+        logger.error(f"Error reiniciando packager tras encoder-restart: {e}")
 
     return {"status": "ok", "job_id": job.id, "channel_name": channel_name}
