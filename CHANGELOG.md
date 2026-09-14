@@ -1,5 +1,14 @@
 # Changelog — Encoder Orchestrator
 
+## v2.16.2 (14 Sep 2026) — Issue #4: Drop frames monitoring + buffer_size cross-platform
+
+- Nuevo: monitoreo de `drop` frames en encoders — detecta incrementos vs baseline
+- Nuevo: evento `DROP_FRAMES` en monitor_logs (visible en front-end `/ui/monitor-logs`)
+- Fix: `buffer_size` diferenciado por plataforma en scripts generados
+  - Mac (ARM): `buffer_size=8388608`
+  - Linux (x86): `buffer_size=26214400`
+- Issue: https://github.com/eskiconce/Mgo_Orquestador/issues/4
+
 ## v2.16.1 (14 Sep 2026) — Fix: Reiniciar packager tras restart de encoder
 
 - Fix: endpoint `/api/internal/encoder-restart` ahora también reinicia el packager asociado

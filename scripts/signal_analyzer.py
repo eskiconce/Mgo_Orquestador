@@ -597,8 +597,9 @@ def generate_encoder_script(analysis, source_url, local_ip, dest_p1, dest_p4, ou
     # Convertir metadatos a string para el template
     mpegts_metadata_str = "\n".join(mpegts_metadata) if mpegts_metadata else ""
     
-    # URLs
-    source_full = build_url(source_url, local_ip, extra_params="fifo_size=2000000&overrun_nonfatal=1&buffer_size=26214400")
+    # URLs - buffer_size diferenciado por plataforma
+    buffer_size = "8388608" if PLATFORM == "Darwin" else "26214400"
+    source_full = build_url(source_url, local_ip, extra_params=f"fifo_size=2000000&overrun_nonfatal=1&buffer_size={buffer_size}")
     dest_p1_full = build_url(dest_p1, local_ip)
     dest_p4_full = build_url(dest_p4, local_ip)
     

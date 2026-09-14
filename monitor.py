@@ -36,6 +36,7 @@ LOG_FILE = "logs/monitor.log"
 _ts_error_state = {}
 _drm_stats_counter = {}  # Contador para polling de stats DRM (cada 3er poll)
 _ts_discontinuity_state = {}  # {job_id: {"first_seen": datetime, "restart_count": int}}
+_drop_baseline_state = {}  # {job_id: {"initial_drop": int, "last_alerted_drop": int}}
 
 
 def notify_telegram(message):
@@ -437,6 +438,47 @@ def check_timestamp_discontinuity(db, job, req_session):
     
     return False
 
+
+def check_ffmpeg_drop_frames(db, job, req_session):
+    """Monitorea cambios en drop frames vs baseline del encoder. Solo log, sin Telegram."""
+    prog_name = f"channel_{job.channel.channel_name}_{job.id}"
+    url_logs = f"http://{job.node.ip_address}:{AGENT_PORT}/jobs/logs"
+    
+    try:
+        resp = req_session.get(url_logs, params={"program_name": prog_name, "type": "err", "lines": 10}, timeout=5)
+        if resp.status_code != 200:
+            return
+        log_content = resp.text
+    except Exception:
+        return
+    
+    drop_match = re.search(r'drop=(\d+)', log_content)
+    if not drop_match:
+        return
+    
+    drop_actual = int(drop_match.group(1))
+    
+    state = _drop_baseline_state.get(job.id)
+    if state is None:
+        _drop_baseline_state[job.id] = {
+            "initial_drop": drop_actual,
+            "last_alerted_drop": drop_actual,
+        }
+        logging.info(f"📊 Drop baseline para {prog_name}: {drop_actual}")
+        return
+    
+    if drop_actual > state["last_alerted_drop"]:
+        delta = drop_actual - state["initial_drop"]
+        log_monitor_event(db, "DROP_FRAMES", 
+            f"{prog_name}: drop {state['last_alerted_drop']}→{drop_actual} (baseline: {state['initial_drop']}, delta: +{delta})",
+            job.node.id)
+        state["last_alerted_drop"] = drop_actual
+    
+    elif drop_actual < state["last_alerted_drop"]:
+        logging.info(f"📊 Drop disminuyó en {prog_name}: {state['last_alerted_drop']} → {drop_actual}")
+        state["last_alerted_drop"] = drop_actual
+
+
 def process_node_thread(node_id):
     """Maneja la sincronización de UN SOLO nodo de forma independiente."""
     db = SessionLocal()
@@ -705,6 +747,10 @@ def process_node_thread(node_id):
                         # NUEVO: Detección de timestamp discontinuity (falla real)
                         if not check_timestamp_discontinuity(db, job, req_session):
                             check_and_heal_children(db, job, req_session)
+                        
+                        # Monitoreo de drop frames (solo encoders)
+                        if job.node.tipo == 'Encoder':
+                            check_ffmpeg_drop_frames(db, job, req_session)
 
                 elif state in ["FATAL", "BACKOFF", "EXITED"]:
                     is_failover_triggered = False
@@ -998,6 +1044,9 @@ if __name__ == "__main__":
                 for key in list(_ts_discontinuity_state.keys()):
                     if key not in [j.id for j in jobs]:
                         _ts_discontinuity_state.pop(key, None)
+                for key in list(_drop_baseline_state.keys()):
+                    if key not in [j.id for j in jobs]:
+                        _drop_baseline_state.pop(key, None)
             except Exception:
                 pass
             finally:
