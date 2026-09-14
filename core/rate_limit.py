@@ -11,7 +11,8 @@ from starlette.middleware.base import BaseHTTPMiddleware
 class RateLimitMiddleware(BaseHTTPMiddleware):
     """
     Rate limiter en memoria.
-    Limita requests por IP en endpoints sensibles (login, API).
+    Limita requests por IP en endpoints sensibles.
+    Excluye health checks y endpoints de lectura.
     """
 
     def __init__(self, app, requests_per_minute: int = 60):
@@ -20,6 +21,13 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self.requests: dict[str, list[float]] = defaultdict(list)
 
     async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+        
+        # Excluir health checks y endpoints de lectura frecuentes
+        excluded_paths = ['/api/health', '/api/health/ready', '/docs', '/openapi.json']
+        if any(path.startswith(p) for p in excluded_paths):
+            return await call_next(request)
+        
         client_ip = request.client.host if request.client else "unknown"
         now = time.time()
         window = 60  # 1 minuto
