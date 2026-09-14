@@ -3,6 +3,7 @@ import httpx
 import json
 import base64
 import zlib
+import re
 import logging
 from logging.handlers import RotatingFileHandler
 import os
