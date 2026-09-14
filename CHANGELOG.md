@@ -1,5 +1,12 @@
 # Changelog — Encoder Orchestrator
 
+## v2.16.1 (14 Sep 2026) — Fix: Reiniciar packager tras restart de encoder
+
+- Fix: endpoint `/api/internal/encoder-restart` ahora también reinicia el packager asociado
+- Fix: packager se resincroniza cuando encoder se auto-reinicia por discontinuidades
+- Fix: `started_at` del packager se actualiza para mostrar uptime correcto en front-end
+- Resuelve bug de desfase encoder-packager tras reinicio automático
+
 ## v2.16.0 (02 Sep 2026) — Issue #2: Restart callback para discontinuidades
 
 - Nuevo: endpoint `POST /api/internal/encoder-restart` — recibe notificación del encoder al reiniciar FFmpeg
