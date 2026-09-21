@@ -661,6 +661,12 @@ def process_node_thread(node_id):
                     health_record.gpu_usage = h_data.get('gpu', 0) 
                     health_record.ffmpeg_running = True
                     node.uptime = str(h_data.get('uptime', "00:00:00"))
+
+                    # Detectar reinicio (solo encoders)
+                    if node.tipo == 'Encoder':
+                        uptime_seconds = h_data.get('uptime_seconds', 0)
+                        if detect_encoder_restart(db, node, uptime_seconds):
+                            handle_encoder_restart_recovery(db, node, req_session)
             except Exception as he:
                 logging.warning(f"No se pudo obtener health del nodo {node.hostname}: {he}")
 
