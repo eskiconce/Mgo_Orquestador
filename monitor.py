@@ -503,6 +503,88 @@ def detect_encoder_restart(db, node, current_uptime_seconds):
     return False
 
 
+def handle_encoder_restart_recovery(db, node, req_session):
+    """Maneja recovery completo tras reinicio de encoder."""
+    # Rate limiting: max 1 recovery per hour per node
+    if node.last_restart_detected_at:
+        time_since_last = (datetime.now() - node.last_restart_detected_at).total_seconds()
+        if time_since_last < 3600:
+            logging.debug(f"Recovery rate limited for {node.hostname} ({time_since_last:.0f}s since last)")
+            return
+    
+    # Find jobs that were running
+    running_jobs = db.query(models.EncodingJob).filter(
+        models.EncodingJob.node_id == node.id,
+        models.EncodingJob.status.in_(["running", "starting"])
+    ).all()
+    
+    if not running_jobs:
+        return
+    
+    # Query agent for actual running processes
+    agent_names = set()
+    try:
+        resp = req_session.get(f"http://{node.ip_address}:{AGENT_PORT}/jobs/status", timeout=10)
+        if resp.status_code == 200:
+            raw = resp.json()
+            if isinstance(raw, list) and all(isinstance(p, dict) and 'name' in p for p in raw):
+                agent_names = {p['name'].lower() for p in raw}
+    except Exception as e:
+        logging.warning(f"No se pudo verificar procesos del agente en RESTART_RECOVERY: {e}")
+    
+    # Identify ghost jobs
+    ghost_jobs = []
+    for job in running_jobs:
+        prefix = "pkg" if job.node.tipo == 'Packager' else "channel"
+        prog = f"{prefix}_{job.channel.channel_name}_{job.id}"
+        if prog.lower() not in agent_names:
+            job.status = "error"
+            job.auto_started = False
+            job.updated_at = datetime.now()
+            ghost_jobs.append(job)
+    
+    if not ghost_jobs:
+        return
+    
+    # Relaunch ghost jobs
+    logging.warning(f"🔄 RECOVERY POST-RESTART: {len(ghost_jobs)} jobs en {node.hostname}")
+    for job in ghost_jobs:
+        prog_name = f"{'pkg' if node.tipo == 'Packager' else 'channel'}_{job.channel.channel_name}_{job.id}"
+        try:
+            if job.command:
+                compressed = base64.b64encode(zlib.compress(job.command.encode('utf-8'))).decode('utf-8')
+                payload = {"job_id": job.id, "channel_name": job.channel.channel_name, "command": compressed, "autostart": True}
+                resp = req_session.post(f"http://{node.ip_address}:{AGENT_PORT}/jobs/create", json=payload, timeout=30)
+                if resp.status_code == 200:
+                    job.status = "starting"
+                    job.auto_started = True
+                    job.started_at = datetime.now()
+                    logging.info(f"  ✅ {prog_name} → starting")
+                else:
+                    logging.warning(f"  ❌ {prog_name} → error {resp.status_code}")
+            else:
+                send_command(job, "start", req_session)
+                job.status = "starting"
+                job.auto_started = True
+                job.started_at = datetime.now()
+                logging.info(f"  ✅ {prog_name} → starting (start)")
+        except Exception as e:
+            logging.warning(f"  ❌ {prog_name} → exception: {e}")
+    
+    db.commit()
+    log_monitor_event(db, "ENCODER_RESTART_RECOVERY", 
+                     f"Recovery post-restart: {len(ghost_jobs)} jobs relanzados en {node.hostname}", 
+                     node.id)
+    
+    # Telegram notification
+    try:
+        msg = f"🔄 *REINICIO DETECTADO*: {node.hostname}\n"
+        msg += f"Jobs recovery: {len(ghost_jobs)} relanzados"
+        notify_telegram(msg)
+    except Exception:
+        pass
+
+
 def process_node_thread(node_id):
     """Maneja la sincronización de UN SOLO nodo de forma independiente."""
     db = SessionLocal()
