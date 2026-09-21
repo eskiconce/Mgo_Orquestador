@@ -1,5 +1,16 @@
 # Changelog — Encoder Orchestrator
 
+## v2.16.3 (21 Sep 2026) — Issue #4: Encoder restart detection via uptime tracking
+
+- Nuevo: detección automática de reinicios de encoder comparando `uptime_seconds` con baseline almacenado
+- Nuevo: `detect_encoder_restart()` — compara uptime actual vs anterior, detecta decremento
+- Nuevo: `handle_encoder_restart_recovery()` — relanza jobs fantasma post-restart automáticamente
+- Nuevo: campos `previous_uptime_seconds` y `last_restart_detected_at` en modelo `Node`
+- Nuevo: rate limiting — max 1 recovery por hora por nodo
+- Nuevo: notificación Telegram al detectar reinicio
+- Nuevo: columna `previous_uptime_seconds` en tabla `nodos` (migration script)
+- Issue: https://github.com/eskiconce/Mgo_Orquestador/issues/4
+
 ## v2.16.2 (14 Sep 2026) — Issue #4: Drop frames monitoring + buffer_size cross-platform
 
 - Nuevo: monitoreo de `drop` frames en encoders — detecta incrementos vs baseline
