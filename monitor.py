@@ -480,6 +480,29 @@ def check_ffmpeg_drop_frames(db, job, req_session):
         state["last_alerted_drop"] = drop_actual
 
 
+def detect_encoder_restart(db, node, current_uptime_seconds):
+    """Detecta si un encoder se reinició comparando uptime."""
+    if current_uptime_seconds is None or current_uptime_seconds == 0:
+        return False
+    
+    if node.previous_uptime_seconds is None:
+        node.previous_uptime_seconds = current_uptime_seconds
+        return False
+    
+    if current_uptime_seconds < node.previous_uptime_seconds:
+        logging.warning(f"🔄 REINICIO DETECTADO: {node.hostname} "
+                       f"(uptime {node.previous_uptime_seconds}s → {current_uptime_seconds}s)")
+        
+        node.last_restart_detected_at = datetime.now()
+        node.previous_uptime_seconds = current_uptime_seconds
+        return True
+    
+    if current_uptime_seconds > node.previous_uptime_seconds:
+        node.previous_uptime_seconds = current_uptime_seconds
+    
+    return False
+
+
 def process_node_thread(node_id):
     """Maneja la sincronización de UN SOLO nodo de forma independiente."""
     db = SessionLocal()
