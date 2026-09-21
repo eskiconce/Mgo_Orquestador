@@ -119,6 +119,11 @@ class Node(Base):
     backup_node = relationship("Node", remote_side="Node.id")
     # ---------------------------------------------------
 
+    # --- CAMPOS PARA DETECCIÓN DE REINICIO ---
+    previous_uptime_seconds = Column(Integer, nullable=True)
+    last_restart_detected_at = Column(DateTime, nullable=True)
+    # -----------------------------------------
+
     # --- CAMPOS DRM ---
     drm_total_users = Column(Integer, default=0)
     drm_total_devices = Column(Integer, default=0)
