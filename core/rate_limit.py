@@ -23,11 +23,12 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
         
-        # Excluir health checks, endpoints internos del monitor y endpoints de lectura frecuentes
+        # Excluir health checks, endpoints internos del monitor, UI y endpoints de lectura frecuentes
         excluded_prefixes = [
             '/api/health', '/api/health/ready', '/docs', '/openapi.json',
             '/api/internal/', '/api/metrics', '/api/nodes/stats',
-            '/static/', '/favicon.ico'
+            '/ui/', '/static/', '/favicon.ico',
+            '/login', '/orchestrator/'
         ]
         if any(path.startswith(p) for p in excluded_prefixes):
             return await call_next(request)
