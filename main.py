@@ -9,6 +9,7 @@ from core.http_client import create_async_client
 from core.logging_service import logger
 from core.deps import templates
 from core.rate_limit import RateLimitMiddleware
+from database import verify_db_connection
 from utils.helpers import time_duration
 from services import cms_gateway, vod_service
 
@@ -31,6 +32,7 @@ http_client: httpx.AsyncClient = None
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     global http_client
+    verify_db_connection()
     http_client = create_async_client()
     logger.info("HTTP client started with connection pooling")
     yield
