@@ -5,6 +5,7 @@
 - Fix: `monitor/__init__.py` — import faltante de `datetime` causaba `NameError` en el loop de monitoreo
 - Fix: rate limit aumentado de 60 a 300 requests/min por IP
 - Fix: endpoints internos del monitor (`/api/internal/`, `/api/metrics`, `/api/nodes/stats`) excluidos del rate limit
+- Fix: endpoints UI (`/ui/`, `/login`, `/orchestrator/`) excluidos del rate limit
 
 ## v2.17.1 (26 Sep 2026) — Issue #6: Limpieza pendiente v2.17.0
 
