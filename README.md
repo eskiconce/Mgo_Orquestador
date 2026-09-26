@@ -58,6 +58,9 @@ Todas se configuran en `.env` (ver `.env.example` como plantilla). **Ninguna deb
 ## Primer arranque
 
 ```bash
+# Ejecutar migraciones de esquema (si es primera vez)
+python scripts/run_migrations.py
+
 # Crear usuario administrador
 python crear_admin.py
 
@@ -66,6 +69,20 @@ uvicorn main:app --reload --port 8000
 ```
 
 La aplicación queda disponible en `http://localhost:8000`, con login en `/login`.
+
+## Migraciones de esquema
+
+El proyecto usa un sistema de migraciones SQL simple:
+
+```bash
+# Ver estado de migraciones
+python scripts/run_migrations.py --status
+
+# Ejecutar migraciones pendientes
+python scripts/run_migrations.py
+```
+
+Las migraciones se encuentran en `scripts/migrations/` como archivos `.sql` numerados. El sistema crea una tabla `schema_migrations` en BD para tracking.
 
 ## Estructura del proyecto
 
