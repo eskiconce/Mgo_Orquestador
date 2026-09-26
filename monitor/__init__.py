@@ -8,6 +8,7 @@ import zlib
 import logging
 from logging.handlers import RotatingFileHandler
 import os
+from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from database import SessionLocal

@@ -15,7 +15,7 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     Excluye health checks y endpoints de lectura.
     """
 
-    def __init__(self, app, requests_per_minute: int = 60):
+    def __init__(self, app, requests_per_minute: int = 300):
         super().__init__(app)
         self.requests_per_minute = requests_per_minute
         self.requests: dict[str, list[float]] = defaultdict(list)
@@ -23,9 +23,13 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
         
-        # Excluir health checks y endpoints de lectura frecuentes
-        excluded_paths = ['/api/health', '/api/health/ready', '/docs', '/openapi.json']
-        if any(path.startswith(p) for p in excluded_paths):
+        # Excluir health checks, endpoints internos del monitor y endpoints de lectura frecuentes
+        excluded_prefixes = [
+            '/api/health', '/api/health/ready', '/docs', '/openapi.json',
+            '/api/internal/', '/api/metrics', '/api/nodes/stats',
+            '/static/', '/favicon.ico'
+        ]
+        if any(path.startswith(p) for p in excluded_prefixes):
             return await call_next(request)
         
         client_ip = request.client.host if request.client else "unknown"
