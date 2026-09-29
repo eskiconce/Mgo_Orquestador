@@ -1,5 +1,11 @@
 # Changelog — Encoder Orchestrator
 
+## v2.18.1 (29 Sep 2026) — Issue #8: Fix navegación + import Request
+
+- Fix: `templates/base.html` — agregado menú "Reglas Alertas" para admin/operator
+- Fix: `routers/alert_rules.py` — import y tipo de `Request` corregido en endpoint UI
+- Issue: https://github.com/eskiconce/Mgo_Orquestador/issues/8
+
 ## v2.18.0 (29 Sep 2026) — Issue #7: Sistema de reglas configurable para alertas
 
 - Nuevo: modelo `AlertRule` — reglas configurables para alertas de plataformas externas
