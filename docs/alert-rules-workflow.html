@@ -1,0 +1,350 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diagrama de Flujo — Sistema de Reglas para Alertas Externas</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background: #f5f5f5; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        h1 { text-align: center; color: #333; margin-bottom: 10px; }
+        .subtitle { text-align: center; color: #666; margin-bottom: 30px; }
+        
+        .flow-diagram { background: white; border-radius: 12px; padding: 30px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); margin-bottom: 30px; }
+        .flow-title { font-size: 18px; font-weight: 600; color: #333; margin-bottom: 20px; padding-bottom: 10px; border-bottom: 2px solid #007bff; }
+        
+        .lanes { display: flex; gap: 15px; margin-bottom: 20px; }
+        .lane { flex: 1; background: #f8f9fa; border-radius: 8px; padding: 15px; min-height: 120px; }
+        .lane-title { font-size: 12px; font-weight: 600; color: #666; text-transform: uppercase; margin-bottom: 10px; }
+        .lane-external { background: #e3f2fd; }
+        .lane-gateway { background: #f3e5f5; }
+        .lane-engine { background: #fff3e0; }
+        .lane-actions { background: #e8f5e9; }
+        .lane-notify { background: #fce4ec; }
+        .lane-audit { background: #f5f5f5; }
+        
+        .node { background: white; border-radius: 6px; padding: 10px 12px; margin-bottom: 8px; border-left: 4px solid #007bff; font-size: 13px; }
+        .node-external { border-left-color: #2196f3; }
+        .node-backend { border-left-color: #ff9800; }
+        .node-action { border-left-color: #4caf50; }
+        .node-notify { border-left-color: #e91e63; }
+        .node-audit { border-left-color: #9e9e9e; }
+        .node-title { font-weight: 600; color: #333; }
+        .node-sub { font-size: 11px; color: #666; margin-top: 2px; }
+        .node-tag { font-size: 10px; color: #007bff; margin-top: 2px; }
+        
+        .arrow { text-align: center; color: #666; font-size: 12px; padding: 5px 0; }
+        
+        .search-diagram { background: white; border-radius: 12px; padding: 30px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); margin-bottom: 30px; }
+        .search-flow { display: flex; flex-direction: column; gap: 15px; align-items: center; }
+        .search-step { background: #f8f9fa; border-radius: 8px; padding: 15px 20px; width: 100%; max-width: 500px; text-align: center; }
+        .search-step-title { font-weight: 600; color: #333; margin-bottom: 5px; }
+        .search-step-desc { font-size: 13px; color: #666; }
+        .search-arrow { font-size: 20px; color: #007bff; }
+        .search-step-primary { background: #e3f2fd; border: 2px solid #2196f3; }
+        .search-step-secondary { background: #f3e5f5; border: 2px solid #9c27b0; }
+        .search-step-tertiary { background: #fff3e0; border: 2px solid #ff9800; }
+        .search-step-default { background: #ffebee; border: 2px solid #f44336; }
+        
+        .actions-table { width: 100%; border-collapse: collapse; margin-top: 20px; }
+        .actions-table th, .actions-table td { padding: 12px; text-align: left; border-bottom: 1px solid #ddd; }
+        .actions-table th { background: #f8f9fa; font-weight: 600; }
+        .actions-table tr:hover { background: #f5f5f5; }
+        
+        .legend { display: flex; gap: 20px; flex-wrap: wrap; margin-top: 20px; }
+        .legend-item { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+        .legend-color { width: 16px; height: 16px; border-radius: 4px; }
+        
+        .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 20px; margin-top: 30px; }
+        .card { background: white; border-radius: 12px; padding: 20px; box-shadow: 0 4px 20px rgba(0,0,0,0.1); }
+        .card-header { display: flex; align-items: center; gap: 10px; margin-bottom: 15px; }
+        .card-dot { width: 12px; height: 12px; border-radius: 50%; }
+        .card-dot-green { background: #4caf50; }
+        .card-dot-red { background: #f44336; }
+        .card-dot-blue { background: #2196f3; }
+        .card-title { font-weight: 600; color: #333; }
+        .card-list { list-style: none; }
+        .card-list li { padding: 5px 0; font-size: 13px; color: #666; }
+        .card-list li:before { content: "•"; color: #007bff; margin-right: 8px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>🔄 Sistema de Reglas para Alertas Externas</h1>
+        <p class="subtitle">Flujo genérico para tsmonitor, packager y plataformas futuras</p>
+        
+        <!-- Flujo Principal -->
+        <div class="flow-diagram">
+            <div class="flow-title">📊 Flujo Principal de Procesamiento</div>
+            
+            <div class="lanes">
+                <div class="lane lane-external">
+                    <div class="lane-title">🔌 Plataforma Externa</div>
+                    <div class="node node-external">
+                        <div class="node-title">TSMonitor</div>
+                        <div class="node-sub">freeze, dead, down, restore...</div>
+                    </div>
+                    <div class="node node-external">
+                        <div class="node-title">Packager</div>
+                        <div class="node-sub">caido, activo</div>
+                    </div>
+                    <div class="node node-external">
+                        <div class="node-title">Encoder</div>
+                        <div class="node-sub">restart</div>
+                    </div>
+                    <div class="node node-external">
+                        <div class="node-title">Otra plataforma</div>
+                        <div class="node-sub">cualquier schema</div>
+                    </div>
+                </div>
+                
+                <div class="lane lane-gateway">
+                    <div class="lane-title">🚪 Gateway</div>
+                    <div class="node node-backend">
+                        <div class="node-title">POST /api/alertas/{source}</div>
+                        <div class="node-sub">Recibir HTTP POST</div>
+                    </div>
+                    <div class="arrow">↓</div>
+                    <div class="node node-backend">
+                        <div class="node-title">Normalizar</div>
+                        <div class="node-sub">→ NormalizedAlert</div>
+                        <div class="node-tag">source, channel_id, alert_type</div>
+                    </div>
+                </div>
+                
+                <div class="lane lane-engine">
+                    <div class="lane-title">⚙️ Motor de Reglas</div>
+                    <div class="node node-backend">
+                        <div class="node-title">Buscar reglas</div>
+                        <div class="node-sub">source + canal + tipo</div>
+                    </div>
+                    <div class="arrow">↓</div>
+                    <div class="node node-backend" style="background: #e8f5e9;">
+                        <div class="node-title">1. Regla específica</div>
+                        <div class="node-sub">source + channel_id + alert_type</div>
+                    </div>
+                    <div class="node node-backend" style="background: #f3e5f5;">
+                        <div class="node-title">2. Regla global source</div>
+                        <div class="node-sub">source + NULL + alert_type</div>
+                    </div>
+                    <div class="node node-backend" style="background: #fff3e0;">
+                        <div class="node-title">3. Regla global total</div>
+                        <div class="node-sub">NULL + NULL + alert_type</div>
+                    </div>
+                    <div class="node node-backend" style="background: #ffebee;">
+                        <div class="node-title">4. Default</div>
+                        <div class="node-sub">comportamiento hardcodeado</div>
+                    </div>
+                    <div class="arrow">↓</div>
+                    <div class="node node-backend">
+                        <div class="node-title">Verificar Cooldown</div>
+                        <div class="node-sub">¿Última ejecución > 60s?</div>
+                    </div>
+                </div>
+                
+                <div class="lane lane-actions">
+                    <div class="lane-title">🎯 Acciones</div>
+                    <div class="node node-action">
+                        <div class="node-title">stop_encoder</div>
+                        <div class="node-sub">POST /jobs/control?action=stop</div>
+                    </div>
+                    <div class="node node-action">
+                        <div class="node-title">start_encoder</div>
+                        <div class="node-sub">POST /jobs/create</div>
+                    </div>
+                    <div class="node node-action">
+                        <div class="node-title">restart_encoder</div>
+                        <div class="node-sub">stop + start</div>
+                    </div>
+                    <div class="node node-action">
+                        <div class="node-title">failover</div>
+                        <div class="node-sub">Señal de respaldo</div>
+                    </div>
+                    <div class="node node-action">
+                        <div class="node-title">notify_only</div>
+                        <div class="node-sub">Sin acción en encoder</div>
+                    </div>
+                </div>
+                
+                <div class="lane lane-notify">
+                    <div class="lane-title">📢 Notificaciones</div>
+                    <div class="node node-notify">
+                        <div class="node-title">Telegram</div>
+                        <div class="node-sub">Mensaje HTML</div>
+                    </div>
+                    <div class="arrow">↓</div>
+                    <div class="node node-notify">
+                        <div class="node-title">CMS Webhook</div>
+                        <div class="node-sub">channel_status event</div>
+                    </div>
+                </div>
+                
+                <div class="lane lane-audit">
+                    <div class="lane-title">📋 Auditoría</div>
+                    <div class="node node-audit">
+                        <div class="node-title">monitor_logs</div>
+                        <div class="node-sub">+ rule_id para trazabilidad</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Flujo de Búsqueda de Reglas -->
+        <div class="search-diagram">
+            <div class="flow-title">🔍 Flujo de Búsqueda de Reglas</div>
+            
+            <div class="search-flow">
+                <div class="search-step">
+                    <div class="search-step-title">📥 Recibir alerta normalizada</div>
+                    <div class="search-step-desc">source, channel_id, alert_type</div>
+                </div>
+                
+                <div class="search-arrow">↓</div>
+                
+                <div class="search-step search-step-primary">
+                    <div class="search-step-title">1. Buscar regla específica</div>
+                    <div class="search-step-desc">source + channel_id + alert_type</div>
+                </div>
+                
+                <div class="search-arrow">↓ no encontrada</div>
+                
+                <div class="search-step search-step-secondary">
+                    <div class="search-step-title">2. Buscar regla global source</div>
+                    <div class="search-step-desc">source + channel_id=NULL + alert_type</div>
+                </div>
+                
+                <div class="search-arrow">↓ no encontrada</div>
+                
+                <div class="search-step search-step-tertiary">
+                    <div class="search-step-title">3. Buscar regla global total</div>
+                    <div class="search-step-desc">source=NULL + channel_id=NULL + alert_type</div>
+                </div>
+                
+                <div class="search-arrow">↓ no encontrada</div>
+                
+                <div class="search-step search-step-default">
+                    <div class="search-step-title">4. Comportamiento por defecto</div>
+                    <div class="search-step-desc">Lógica hardcodeada actual</div>
+                </div>
+                
+                <div class="search-arrow">↓</div>
+                
+                <div class="search-step">
+                    <div class="search-step-title">✅ Regla encontrada</div>
+                    <div class="search-step-desc">Verificar cooldown → Ejecutar acción</div>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Tabla de Acciones -->
+        <div class="flow-diagram">
+            <div class="flow-title">🎯 Acciones Disponibles</div>
+            
+            <table class="actions-table">
+                <thead>
+                    <tr>
+                        <th>Acción</th>
+                        <th>Descripción</th>
+                        <th>Endpoint Agente</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr>
+                        <td><strong>stop_encoder</strong></td>
+                        <td>Detiene el encoder del canal</td>
+                        <td><code>POST /jobs/control?action=stop</code></td>
+                    </tr>
+                    <tr>
+                        <td><strong>start_encoder</strong></td>
+                        <td>Inicia el encoder del canal</td>
+                        <td><code>POST /jobs/create</code></td>
+                    </tr>
+                    <tr>
+                        <td><strong>restart_encoder</strong></td>
+                        <td>Reinicia el encoder (stop + start)</td>
+                        <td><code>POST /jobs/control?action=restart</code></td>
+                    </tr>
+                    <tr>
+                        <td><strong>failover</strong></td>
+                        <td>Activa failover a señal de respaldo</td>
+                        <td><code>POST /api/internal/trigger-failover/{id}</code></td>
+                    </tr>
+                    <tr>
+                        <td><strong>notify_only</strong></td>
+                        <td>Solo registra log y notifica</td>
+                        <td>(sin acción en encoder)</td>
+                    </tr>
+                </tbody>
+            </table>
+            
+            <div class="legend">
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #2196f3;"></div>
+                    <span>Plataforma externa</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #9c27b0;"></div>
+                    <span>Gateway</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #ff9800;"></div>
+                    <span>Motor de reglas</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #4caf50;"></div>
+                    <span>Acciones</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #e91e63;"></div>
+                    <span>Notificaciones</span>
+                </div>
+                <div class="legend-item">
+                    <div class="legend-color" style="background: #9e9e9e;"></div>
+                    <span>Auditoría</span>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Cards -->
+        <div class="cards">
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-dot card-dot-green"></div>
+                    <div class="card-title">Flujo Principal</div>
+                </div>
+                <ul class="card-list">
+                    <li>Alerta llega desde plataforma externa</li>
+                    <li>Se normaliza a formato interno unificado</li>
+                    <li>Se busca regla aplicable (específica → global → default)</li>
+                    <li>Se ejecuta acción y se notifica</li>
+                </ul>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-dot card-dot-red"></div>
+                    <div class="card-title">Búsqueda de Reglas</div>
+                </div>
+                <ul class="card-list">
+                    <li>Prioridad: específica > global source > global total > default</li>
+                    <li>Cooldown evita ejecuciones repetidas</li>
+                    <li>Cada regla puede habilitar/deshabilitar notificaciones</li>
+                </ul>
+            </div>
+            
+            <div class="card">
+                <div class="card-header">
+                    <div class="card-dot card-dot-blue"></div>
+                    <div class="card-title">Extensibilidad</div>
+                </div>
+                <ul class="card-list">
+                    <li>Nueva plataforma: crear endpoint + normalizador</li>
+                    <li>Las reglas existentes aplican automáticamente</li>
+                    <li>Sin modificar código del motor de reglas</li>
+                </ul>
+            </div>
+        </div>
+    </div>
+</body>
+</html>
