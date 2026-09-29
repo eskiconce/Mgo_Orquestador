@@ -279,3 +279,38 @@ class SignalAnalysis(Base):
     channel = relationship("Channel")
     node = relationship("Node")
 
+
+class AlertRule(Base):
+    __tablename__ = "alert_rules"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(100), nullable=False)
+
+    # Filtros de aplicabilidad
+    source = Column(String(50), nullable=False)           # tsmonitor, packager, encoder, any
+    channel_id = Column(Integer, ForeignKey("channels.id"), nullable=True)  # NULL = todos los canales
+    alert_type = Column(String(50), nullable=False)       # freeze, dead, down, restore, ok, up, etc.
+
+    # Acción a ejecutar
+    action = Column(String(50), nullable=False)           # stop_encoder, start_encoder, restart_encoder, notify_only, failover
+
+    # Configuración
+    enabled = Column(Boolean, default=True)
+    priority = Column(Integer, default=0)                 # Mayor = más prioridad
+    cooldown_seconds = Column(Integer, default=60)
+
+    # Notificaciones
+    notify_telegram = Column(Boolean, default=True)
+    notify_cms = Column(Boolean, default=True)
+    custom_message = Column(Text, nullable=True)
+
+    # Auditoría
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, onupdate=datetime.now)
+
+    # Última ejecución (para cooldown)
+    last_executed_at = Column(DateTime, nullable=True)
+
+    # Relación
+    channel = relationship("Channel")
+

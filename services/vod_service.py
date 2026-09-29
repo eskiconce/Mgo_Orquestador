@@ -438,10 +438,13 @@ class TSMonitorAlert(BaseModel):
     hora: str
     status: str
 
-# --- ENDPOINT RECEPTOR ---
+# --- ENDPOINT RECEPTOR (v2 — usa motor de reglas) ---
 @router.post("/api/alertas/tsmonitor")
 def receive_tsmonitor_alert(payload: TSMonitorAlert, db: Session = Depends(get_db)):
     try:
+        from services.alert_normalizer import normalize_tsmonitor_alert
+        from services.alert_rule_engine import process_alert
+
         # 1. Buscar el Canal — por unique_id con fallback a id
         channel = db.query(models.Channel).filter(
             models.Channel.unique_id == str(payload.num_canal)
@@ -459,101 +462,100 @@ def receive_tsmonitor_alert(payload: TSMonitorAlert, db: Session = Depends(get_d
         if not channel:
             return {"status": "error", "message": f"Canal {payload.num_canal} no encontrado."}
 
-        # 2. 🛠️ MAGIA: Combinar y parsear la FECHA Y HORA REALES de tsmonitor
-        try:
-            # Recomienda que tsmonitor envíe formatos estándar (Ej: "2026-05-19" y "15:30:00")
-            string_fecha = f"{payload.fecha} {payload.hora}"
-            timestamp_real = datetime.strptime(string_fecha, "%Y-%m-%d %H:%M:%S")
-        except Exception:
-            # Fallback de seguridad: si el formato falla, usamos la hora del servidor
-            timestamp_real = datetime.now()
+        # 2. Normalizar alerta a formato interno
+        normalized = normalize_tsmonitor_alert(
+            num_canal=payload.num_canal,
+            status=payload.status,
+            fecha=payload.fecha,
+            hora=payload.hora,
+            channel_id=channel.id
+        )
 
-        falla_tipo = payload.status.lower()
-
-        # 3. Guardar en la BD usando la HORA REAL del incidente en origen
+        # 3. Registrar en monitor_logs
         alert_entry = models.MonitorLog(
             event_type="TSMONITOR_ALERT",
-            message=f"Alerta externa [{falla_tipo}] para el canal {channel.channel_name}. Reportada por TSMonitor.",
+            message=f"Alerta externa [{payload.status}] para el canal {channel.channel_name}. Reportada por TSMonitor.",
             node_id=None,
-            timestamp=timestamp_real  # <-- AQUÍ se guarda el tiempo real enviado
+            timestamp=normalized.timestamp
         )
         db.add(alert_entry)
-        db.flush() # Obtenemos persistencia temporal antes del commit
+        db.flush()
 
-        if falla_tipo == "black":
-            db.commit()
-            return {"status": "success", "message": "Alerta black registrada cronológicamente."}
+        # 4. Procesar con motor de reglas
+        result = process_alert(db, normalized)
 
-        # 4. Buscar el trabajo del ENCODER activo
-        encoder_job = db.query(models.EncodingJob).join(models.Node).filter(
-            models.EncodingJob.channel_id == channel.id,
-            models.Node.tipo == 'Encoder'
-        ).first()
+        # 5. Si la regla indica ejecutar acción en encoder, hacerlo
+        if result["action_taken"] and result["rule"]:
+            rule_action = result["rule"]["action"]
+            
+            # Buscar job del encoder
+            encoder_job = db.query(models.EncodingJob).join(models.Node).filter(
+                models.EncodingJob.channel_id == channel.id,
+                models.Node.tipo == 'Encoder'
+            ).first()
 
-        if not encoder_job:
-            db.commit()
-            return {"status": "error", "message": "No hay un nodo Encoder asignado a este canal."}
+            if encoder_job and rule_action in ["stop_encoder", "start_encoder", "restart_encoder"]:
+                agent_ip = encoder_job.node.ip_address
+                headers = {"X-API-Key": AGENT_API_KEY}
+                prog_name = f"channel_{channel.channel_name}_{encoder_job.id}"
 
-        agent_ip = encoder_job.node.ip_address
-        headers = {"X-API-Key": AGENT_API_KEY}
-        agent_port=8005
-        prog_name = f"channel_{channel.channel_name}_{encoder_job.id}"
-
-        # 5. LÓGICA DE FALLO (Freeze / Down)
-        if falla_tipo in ["freeze", "dead", "down"]:
-            if encoder_job.status in ["running", "starting"]:
                 try:
-                    url_stop = f"http://{agent_ip}:8000/jobs/control"
-                    _http.post(url_stop, params={"action": "stop", "program_name": prog_name}, headers=headers, timeout=5)
-
-                    encoder_job.status = "stopped"
-                    encoder_job.auto_started = False
-
-                    # Registramos la detención con la misma estampa de tiempo real
-                    db.add(models.MonitorLog(
-                        event_type="ENCODER_STOPPED",
-                        message=f"Encoder de {channel.channel_name} detenido por orden de TSMonitor ({falla_tipo}).",
-                        node_id=encoder_job.node_id,
-                        timestamp=timestamp_real  # <-- Misma estampa de tiempo
-                    ))
-                    db.commit()
-                    return {"status": "success", "message": "Encoder detenido con estampa de tiempo sincronizada."}
+                    if rule_action == "stop_encoder" and encoder_job.status in ["running", "starting"]:
+                        url_stop = f"http://{agent_ip}:8000/jobs/control"
+                        _http.post(url_stop, params={"action": "stop", "program_name": prog_name}, headers=headers, timeout=5)
+                        encoder_job.status = "stopped"
+                        encoder_job.auto_started = False
+                        db.add(models.MonitorLog(
+                            event_type="ENCODER_STOPPED",
+                            message=f"Encoder de {channel.channel_name} detenido por regla: {result['rule']['name']}",
+                            node_id=encoder_job.node_id,
+                            timestamp=normalized.timestamp
+                        ))
+                    elif rule_action == "start_encoder" and encoder_job.status in ["stopped", "error"]:
+                        url_start = f"http://{agent_ip}:8000/jobs/create"
+                        payload_start = {
+                            "job_id": encoder_job.id,
+                            "channel_name": channel.channel_name,
+                            "command": encoder_job.command_compress,
+                            "autostart": True
+                        }
+                        _http.post(url_start, json=payload_start, headers=headers, timeout=10)
+                        encoder_job.status = "starting"
+                        db.add(models.MonitorLog(
+                            event_type="ENCODER_STARTED",
+                            message=f"Encoder de {channel.channel_name} iniciado por regla: {result['rule']['name']}",
+                            node_id=encoder_job.node_id,
+                            timestamp=normalized.timestamp
+                        ))
+                    elif rule_action == "restart_encoder":
+                        # Stop first, then start
+                        url_stop = f"http://{agent_ip}:8000/jobs/control"
+                        _http.post(url_stop, params={"action": "stop", "program_name": prog_name}, headers=headers, timeout=5)
+                        url_start = f"http://{agent_ip}:8000/jobs/create"
+                        payload_start = {
+                            "job_id": encoder_job.id,
+                            "channel_name": channel.channel_name,
+                            "command": encoder_job.command_compress,
+                            "autostart": True
+                        }
+                        _http.post(url_start, json=payload_start, headers=headers, timeout=10)
+                        encoder_job.status = "starting"
+                        db.add(models.MonitorLog(
+                            event_type="ENCODER_RESTARTED",
+                            message=f"Encoder de {channel.channel_name} reiniciado por regla: {result['rule']['name']}",
+                            node_id=encoder_job.node_id,
+                            timestamp=normalized.timestamp
+                        ))
                 except Exception as e:
-                    db.commit()
-                    return {"status": "error", "message": f"Fallo al contactar al Agente Encoder: {e}"}
-            else:
-                db.commit()
-                return {"status": "success", "message": "El Encoder ya se encontraba detenido."}
-
-        # 6. LÓGICA DE RESTAURACIÓN
-        elif falla_tipo in ["restore", "ok", "up", "restored","live"]:
-            if encoder_job.status != "running":
-                try:
-                    url_start = f"http://{agent_ip}:8000/jobs/create"
-                    payload_start = {
-                        "job_id": encoder_job.id,
-                        "channel_name": channel.channel_name,
-                        "command": encoder_job.command_compress,
-                        "autostart": True
-                    }
-                    _http.post(url_start, json=payload_start, headers=headers, timeout=10)
-
-                    encoder_job.status = "starting"
-
-                    db.add(models.MonitorLog(
-                        event_type="ENCODER_STARTED",
-                        message=f"Encoder de {channel.channel_name} restablecido. Señal recuperada en origen.",
-                        node_id=encoder_job.node_id,
-                        timestamp=timestamp_real  # <-- Misma estampa de tiempo
-                    ))
-                    db.commit()
-                    return {"status": "success", "message": "Encoder reiniciado con estampa de tiempo sincronizada."}
-                except Exception as e:
-                    db.commit()
-                    return {"status": "error", "message": f"Fallo al iniciar el Agente Encoder: {e}"}
+                    logger.warning(f"Error ejecutando acción en encoder: {e}")
 
         db.commit()
-        return {"status": "ignored", "message": f"Falla '{falla_tipo}' no reconocida."}
+        return {
+            "status": "success",
+            "message": result.get("message", "Alerta procesada"),
+            "rule": result.get("rule"),
+            "action_taken": result.get("action_taken", False),
+        }
 
     except Exception as e:
         db.rollback()
