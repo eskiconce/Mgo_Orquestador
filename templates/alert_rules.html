@@ -1,377 +1,344 @@
-<!DOCTYPE html>
-<html lang="es">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Reglas de Alertas — MundoGo Orchestrator</title>
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
-    <style>
-        .rule-enabled { border-left: 4px solid #28a745; }
-        .rule-disabled { border-left: 4px solid #dc3545; opacity: 0.7; }
-        .source-badge { font-size: 0.75rem; padding: 2px 8px; border-radius: 12px; }
-        .source-tsmonitor { background: #007bff; color: white; }
-        .source-packager { background: #6f42c1; color: white; }
-        .source-encoder { background: #fd7e14; color: white; }
-        .source-any { background: #6c757d; color: white; }
-        .action-badge { font-size: 0.75rem; padding: 2px 8px; border-radius: 12px; }
-        .action-stop { background: #dc3545; color: white; }
-        .action-start { background: #28a745; color: white; }
-        .action-restart { background: #ffc107; color: black; }
-        .action-notify { background: #17a2b8; color: white; }
-        .action-failover { background: #e83e8c; color: white; }
-    </style>
-</head>
-<body>
-    <div class="container-fluid">
-        <div class="row">
-            <!-- Sidebar -->
-            <nav class="col-md-2 d-none d-md-block sidebar bg-dark">
-                <div class="position-sticky pt-3">
-                    <ul class="nav flex-column">
-                        <li class="nav-item"><a class="nav-link text-white" href="/"><i class="fas fa-chart-line me-2"></i> Dashboard</a></li>
-                        <li class="nav-item"><a class="nav-link text-white" href="/ui/nodes"><i class="fas fa-server me-2"></i> Nodos</a></li>
-                        <li class="nav-item"><a class="nav-link text-white" href="/ui/channels"><i class="fas fa-tv me-2"></i> Canales</a></li>
-                        <li class="nav-item"><a class="nav-link text-white" href="/ui/processes"><i class="fas fa-cogs me-2"></i> Procesos</a></li>
-                        {% if user.role in ['admin', 'operator'] %}
-                        <li class="nav-item"><a class="nav-link text-white active" href="/ui/alert-rules"><i class="fas fa-bell me-2"></i> Reglas Alertas</a></li>
-                        {% endif %}
-                        {% if user.role == 'admin' %}
-                        <li class="nav-item"><a class="nav-link text-white" href="/ui/users"><i class="fas fa-users me-2"></i> Usuarios</a></li>
-                        {% endif %}
-                    </ul>
-                </div>
-            </nav>
+{% extends "base.html" %}
 
-            <!-- Main content -->
-            <main class="col-md-10 ms-sm-auto px-4">
-                <div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
-                    <h1 class="h2"><i class="fas fa-bell me-2"></i> Reglas de Alertas</h1>
-                    <div>
-                        <span class="badge bg-success me-2">{{ rules|selectattr('enabled')|list|length }} activas</span>
-                        <span class="badge bg-secondary">{{ rules|selectattr('enabled', 'false')|list|length }} inactivas</span>
-                        {% if user.role == 'admin' %}
-                        <button class="btn btn-primary btn-sm ms-2" onclick="showCreateModal()">
-                            <i class="fas fa-plus me-1"></i> Nueva Regla
-                        </button>
-                        {% endif %}
-                    </div>
-                </div>
+{% block content %}
+<style>
+    .rule-enabled { border-left: 4px solid #28a745; }
+    .rule-disabled { border-left: 4px solid #dc3545; opacity: 0.7; }
+    .source-badge { font-size: 0.75rem; padding: 2px 8px; border-radius: 12px; }
+    .source-tsmonitor { background: #007bff; color: white; }
+    .source-packager { background: #6f42c1; color: white; }
+    .source-encoder { background: #fd7e14; color: white; }
+    .source-any { background: #6c757d; color: white; }
+    .action-badge { font-size: 0.75rem; padding: 2px 8px; border-radius: 12px; }
+    .action-stop { background: #dc3545; color: white; }
+    .action-start { background: #28a745; color: white; }
+    .action-restart { background: #ffc107; color: black; }
+    .action-notify { background: #17a2b8; color: white; }
+    .action-failover { background: #e83e8c; color: white; }
+</style>
 
-                <!-- Filtros -->
-                <div class="row mb-3">
-                    <div class="col-md-3">
-                        <select class="form-select form-select-sm" id="filterSource" onchange="filterRules()">
-                            <option value="">Todas las fuentes</option>
-                            <option value="tsmonitor">TSMonitor</option>
-                            <option value="packager">Packager</option>
-                            <option value="encoder">Encoder</option>
-                            <option value="any">Any</option>
-                        </select>
-                    </div>
-                    <div class="col-md-3">
-                        <select class="form-select form-select-sm" id="filterAction" onchange="filterRules()">
-                            <option value="">Todas las acciones</option>
-                            <option value="stop_encoder">Stop Encoder</option>
-                            <option value="start_encoder">Start Encoder</option>
-                            <option value="restart_encoder">Restart Encoder</option>
-                            <option value="notify_only">Notify Only</option>
-                            <option value="failover">Failover</option>
-                        </select>
-                    </div>
-                    <div class="col-md-3">
-                        <select class="form-select form-select-sm" id="filterEnabled" onchange="filterRules()">
-                            <option value="">Todos los estados</option>
-                            <option value="true">Habilitadas</option>
-                            <option value="false">Deshabilitadas</option>
-                        </select>
-                    </div>
-                </div>
-
-                <!-- Tabla de reglas -->
-                <div class="table-responsive">
-                    <table class="table table-hover">
-                        <thead>
-                            <tr>
-                                <th>Nombre</th>
-                                <th>Fuente</th>
-                                <th>Canal</th>
-                                <th>Tipo Alerta</th>
-                                <th>Acción</th>
-                                <th>Prioridad</th>
-                                <th>Cooldown</th>
-                                <th>Estado</th>
-                                <th>Última Ejecución</th>
-                                {% if user.role == 'admin' %}
-                                <th>Acciones</th>
-                                {% endif %}
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {% for rule in rules %}
-                            <tr class="rule-row {% if rule.enabled %}rule-enabled{% else %}rule-disabled{% endif %}" 
-                                data-source="{{ rule.source }}" 
-                                data-action="{{ rule.action }}" 
-                                data-enabled="{{ rule.enabled|lower }}">
-                                <td>
-                                    <strong>{{ rule.name }}</strong>
-                                    {% if rule.custom_message %}
-                                    <br><small class="text-muted">{{ rule.custom_message[:50] }}...</small>
-                                    {% endif %}
-                                </td>
-                                <td><span class="source-badge source-{{ rule.source }}">{{ rule.source }}</span></td>
-                                <td>{{ rule.channel.channel_name if rule.channel else "Todos" }}</td>
-                                <td><code>{{ rule.alert_type }}</code></td>
-                                <td><span class="action-badge action-{{ rule.action.split('_')[0] }}">{{ rule.action }}</span></td>
-                                <td>{{ rule.priority }}</td>
-                                <td>{{ rule.cooldown_seconds }}s</td>
-                                <td>
-                                    {% if rule.enabled %}
-                                    <span class="badge bg-success">Activa</span>
-                                    {% else %}
-                                    <span class="badge bg-danger">Inactiva</span>
-                                    {% endif %}
-                                </td>
-                                <td>
-                                    {% if rule.last_executed_at %}
-                                    <small>{{ rule.last_executed_at.strftime('%d/%m %H:%M') }}</small>
-                                    {% else %}
-                                    <small class="text-muted">Nunca</small>
-                                    {% endif %}
-                                </td>
-                                {% if user.role == 'admin' %}
-                                <td>
-                                    <button class="btn btn-sm btn-outline-{{ 'danger' if rule.enabled else 'success' }}" 
-                                            onclick="toggleRule({{ rule.id }})" title="{{ 'Deshabilitar' if rule.enabled else 'Habilitar' }}">
-                                        <i class="fas fa-{{ 'pause' if rule.enabled else 'play' }}"></i>
-                                    </button>
-                                    <button class="btn btn-sm btn-outline-primary" onclick="editRule({{ rule.id }})" title="Editar">
-                                        <i class="fas fa-edit"></i>
-                                    </button>
-                                    <button class="btn btn-sm btn-outline-danger" onclick="deleteRule({{ rule.id }}, '{{ rule.name }}')" title="Eliminar">
-                                        <i class="fas fa-trash"></i>
-                                    </button>
-                                </td>
-                                {% endif %}
-                            </tr>
-                            {% endfor %}
-                        </tbody>
-                    </table>
-                </div>
-            </main>
-        </div>
+<div class="d-flex justify-content-between flex-wrap flex-md-nowrap align-items-center pt-3 pb-2 mb-3 border-bottom">
+    <h3><i class="fas fa-bell text-warning me-2"></i>Reglas de Alertas</h3>
+    <div>
+        <span class="badge bg-success me-2">{{ rules|selectattr('enabled')|list|length }} activas</span>
+        <span class="badge bg-secondary">{{ rules|selectattr('enabled', 'false')|list|length }} inactivas</span>
+        {% if user.role == 'admin' %}
+        <button class="btn btn-primary btn-sm ms-2" onclick="showCreateModal()">
+            <i class="fas fa-plus me-1"></i> Nueva Regla
+        </button>
+        {% endif %}
     </div>
+</div>
 
-    <!-- Modal Crear/Editar -->
-    <div class="modal fade" id="ruleModal" tabindex="-1">
-        <div class="modal-dialog modal-lg">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="ruleModalTitle">Nueva Regla</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-                </div>
-                <div class="modal-body">
-                    <form id="ruleForm">
-                        <input type="hidden" id="ruleId" value="">
-                        
-                        <div class="row">
-                            <div class="col-md-8">
-                                <div class="mb-3">
-                                    <label class="form-label">Nombre</label>
-                                    <input type="text" class="form-control" id="ruleName" required>
-                                </div>
+<!-- Filtros -->
+<div class="row mb-3">
+    <div class="col-md-3">
+        <select class="form-select form-select-sm" id="filterSource" onchange="filterRules()">
+            <option value="">Todas las fuentes</option>
+            <option value="tsmonitor">TSMonitor</option>
+            <option value="packager">Packager</option>
+            <option value="encoder">Encoder</option>
+            <option value="any">Any</option>
+        </select>
+    </div>
+    <div class="col-md-3">
+        <select class="form-select form-select-sm" id="filterAction" onchange="filterRules()">
+            <option value="">Todas las acciones</option>
+            <option value="stop_encoder">Stop Encoder</option>
+            <option value="start_encoder">Start Encoder</option>
+            <option value="restart_encoder">Restart Encoder</option>
+            <option value="notify_only">Notify Only</option>
+            <option value="failover">Failover</option>
+        </select>
+    </div>
+    <div class="col-md-3">
+        <select class="form-select form-select-sm" id="filterEnabled" onchange="filterRules()">
+            <option value="">Todos los estados</option>
+            <option value="true">Habilitadas</option>
+            <option value="false">Deshabilitadas</option>
+        </select>
+    </div>
+</div>
+
+<!-- Tabla de reglas -->
+<div class="table-responsive">
+    <table class="table table-hover">
+        <thead>
+            <tr>
+                <th>Nombre</th>
+                <th>Fuente</th>
+                <th>Canal</th>
+                <th>Tipo Alerta</th>
+                <th>Acción</th>
+                <th>Prioridad</th>
+                <th>Cooldown</th>
+                <th>Estado</th>
+                <th>Última Ejecución</th>
+                {% if user.role == 'admin' %}
+                <th>Acciones</th>
+                {% endif %}
+            </tr>
+        </thead>
+        <tbody>
+            {% for rule in rules %}
+            <tr class="rule-row {% if rule.enabled %}rule-enabled{% else %}rule-disabled{% endif %}" 
+                data-source="{{ rule.source }}" 
+                data-action="{{ rule.action }}" 
+                data-enabled="{{ rule.enabled|lower }}">
+                <td>
+                    <strong>{{ rule.name }}</strong>
+                    {% if rule.custom_message %}
+                    <br><small class="text-muted">{{ rule.custom_message[:50] }}...</small>
+                    {% endif %}
+                </td>
+                <td><span class="source-badge source-{{ rule.source }}">{{ rule.source }}</span></td>
+                <td>{{ rule.channel.channel_name if rule.channel else "Todos" }}</td>
+                <td><code>{{ rule.alert_type }}</code></td>
+                <td><span class="action-badge action-{{ rule.action.split('_')[0] }}">{{ rule.action }}</span></td>
+                <td>{{ rule.priority }}</td>
+                <td>{{ rule.cooldown_seconds }}s</td>
+                <td>
+                    {% if rule.enabled %}
+                    <span class="badge bg-success">Activa</span>
+                    {% else %}
+                    <span class="badge bg-danger">Inactiva</span>
+                    {% endif %}
+                </td>
+                <td>
+                    {% if rule.last_executed_at %}
+                    <small>{{ rule.last_executed_at.strftime('%d/%m %H:%M') }}</small>
+                    {% else %}
+                    <small class="text-muted">Nunca</small>
+                    {% endif %}
+                </td>
+                {% if user.role == 'admin' %}
+                <td>
+                    <button class="btn btn-sm btn-outline-{{ 'danger' if rule.enabled else 'success' }}" 
+                            onclick="toggleRule({{ rule.id }})" title="{{ 'Deshabilitar' if rule.enabled else 'Habilitar' }}">
+                        <i class="fas fa-{{ 'pause' if rule.enabled else 'play' }}"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-primary" onclick="editRule({{ rule.id }})" title="Editar">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button class="btn btn-sm btn-outline-danger" onclick="deleteRule({{ rule.id }}, '{{ rule.name }}')" title="Eliminar">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </td>
+                {% endif %}
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</div>
+
+<!-- Modal Crear/Editar -->
+<div class="modal fade" id="ruleModal" tabindex="-1">
+    <div class="modal-dialog modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="ruleModalTitle">Nueva Regla</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <form id="ruleForm">
+                    <input type="hidden" id="ruleId" value="">
+                    
+                    <div class="row">
+                        <div class="col-md-8">
+                            <div class="mb-3">
+                                <label class="form-label">Nombre</label>
+                                <input type="text" class="form-control" id="ruleName" required>
                             </div>
-                            <div class="col-md-4">
-                                <div class="mb-3">
-                                    <label class="form-label">Prioridad</label>
-                                    <input type="number" class="form-control" id="rulePriority" value="100">
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label class="form-label">Prioridad</label>
+                                <input type="number" class="form-control" id="rulePriority" value="100">
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label class="form-label">Fuente</label>
+                                <select class="form-select" id="ruleSource" required>
+                                    <option value="tsmonitor">TSMonitor</option>
+                                    <option value="packager">Packager</option>
+                                    <option value="encoder">Encoder</option>
+                                    <option value="any">Any (Global)</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label class="form-label">Canal</label>
+                                <select class="form-select" id="ruleChannel">
+                                    <option value="">Todos los canales</option>
+                                    {% for ch in channels %}
+                                    <option value="{{ ch.id }}">{{ ch.channel_name }}</option>
+                                    {% endfor %}
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label class="form-label">Tipo de Alerta</label>
+                                <input type="text" class="form-control" id="ruleAlertType" placeholder="freeze, down, restore..." required>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <div class="row">
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label class="form-label">Acción</label>
+                                <select class="form-select" id="ruleAction" required>
+                                    <option value="stop_encoder">Stop Encoder</option>
+                                    <option value="start_encoder">Start Encoder</option>
+                                    <option value="restart_encoder">Restart Encoder</option>
+                                    <option value="notify_only">Notify Only</option>
+                                    <option value="failover">Failover</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label class="form-label">Cooldown (segundos)</label>
+                                <input type="number" class="form-control" id="ruleCooldown" value="60">
+                            </div>
+                        </div>
+                        <div class="col-md-4">
+                            <div class="mb-3">
+                                <label class="form-label">Notificaciones</label>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="ruleNotifyTelegram" checked>
+                                    <label class="form-check-label">Telegram</label>
+                                </div>
+                                <div class="form-check">
+                                    <input class="form-check-input" type="checkbox" id="ruleNotifyCms" checked>
+                                    <label class="form-check-label">CMS</label>
                                 </div>
                             </div>
                         </div>
-                        
-                        <div class="row">
-                            <div class="col-md-4">
-                                <div class="mb-3">
-                                    <label class="form-label">Fuente</label>
-                                    <select class="form-select" id="ruleSource" required>
-                                        <option value="tsmonitor">TSMonitor</option>
-                                        <option value="packager">Packager</option>
-                                        <option value="encoder">Encoder</option>
-                                        <option value="any">Any (Global)</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="mb-3">
-                                    <label class="form-label">Canal</label>
-                                    <select class="form-select" id="ruleChannel">
-                                        <option value="">Todos los canales</option>
-                                        {% for ch in channels %}
-                                        <option value="{{ ch.id }}">{{ ch.channel_name }}</option>
-                                        {% endfor %}
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="mb-3">
-                                    <label class="form-label">Tipo de Alerta</label>
-                                    <input type="text" class="form-control" id="ruleAlertType" placeholder="freeze, down, restore..." required>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="row">
-                            <div class="col-md-4">
-                                <div class="mb-3">
-                                    <label class="form-label">Acción</label>
-                                    <select class="form-select" id="ruleAction" required>
-                                        <option value="stop_encoder">Stop Encoder</option>
-                                        <option value="start_encoder">Start Encoder</option>
-                                        <option value="restart_encoder">Restart Encoder</option>
-                                        <option value="notify_only">Notify Only</option>
-                                        <option value="failover">Failover</option>
-                                    </select>
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="mb-3">
-                                    <label class="form-label">Cooldown (segundos)</label>
-                                    <input type="number" class="form-control" id="ruleCooldown" value="60">
-                                </div>
-                            </div>
-                            <div class="col-md-4">
-                                <div class="mb-3">
-                                    <label class="form-label">Notificaciones</label>
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" id="ruleNotifyTelegram" checked>
-                                        <label class="form-check-label">Telegram</label>
-                                    </div>
-                                    <div class="form-check">
-                                        <input class="form-check-input" type="checkbox" id="ruleNotifyCms" checked>
-                                        <label class="form-check-label">CMS</label>
-                                    </div>
-                                </div>
-                            </div>
-                        </div>
-                        
-                        <div class="mb-3">
-                            <label class="form-label">Mensaje Personalizado (opcional)</label>
-                            <textarea class="form-control" id="ruleMessage" rows="2"></textarea>
-                        </div>
-                    </form>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
-                    <button type="button" class="btn btn-primary" onclick="saveRule()">Guardar</button>
-                </div>
+                    </div>
+                    
+                    <div class="mb-3">
+                        <label class="form-label">Mensaje Personalizado (opcional)</label>
+                        <textarea class="form-control" id="ruleMessage" rows="2"></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Cancelar</button>
+                <button type="button" class="btn btn-primary" onclick="saveRule()">Guardar</button>
             </div>
         </div>
     </div>
+</div>
 
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
-    <script>
-        let ruleModal;
+<script>
+    let ruleModal;
+    
+    document.addEventListener('DOMContentLoaded', function() {
+        ruleModal = new bootstrap.Modal(document.getElementById('ruleModal'));
+    });
+    
+    function filterRules() {
+        const source = document.getElementById('filterSource').value;
+        const action = document.getElementById('filterAction').value;
+        const enabled = document.getElementById('filterEnabled').value;
         
-        document.addEventListener('DOMContentLoaded', function() {
-            ruleModal = new bootstrap.Modal(document.getElementById('ruleModal'));
+        document.querySelectorAll('.rule-row').forEach(row => {
+            let show = true;
+            if (source && row.dataset.source !== source) show = false;
+            if (action && row.dataset.action !== action) show = false;
+            if (enabled && row.dataset.enabled !== enabled) show = false;
+            row.style.display = show ? '' : 'none';
         });
-        
-        function filterRules() {
-            const source = document.getElementById('filterSource').value;
-            const action = document.getElementById('filterAction').value;
-            const enabled = document.getElementById('filterEnabled').value;
-            
-            document.querySelectorAll('.rule-row').forEach(row => {
-                let show = true;
-                if (source && row.dataset.source !== source) show = false;
-                if (action && row.dataset.action !== action) show = false;
-                if (enabled && row.dataset.enabled !== enabled) show = false;
-                row.style.display = show ? '' : 'none';
+    }
+    
+    function showCreateModal() {
+        document.getElementById('ruleModalTitle').textContent = 'Nueva Regla';
+        document.getElementById('ruleId').value = '';
+        document.getElementById('ruleForm').reset();
+        document.getElementById('ruleNotifyTelegram').checked = true;
+        document.getElementById('ruleNotifyCms').checked = true;
+        ruleModal.show();
+    }
+    
+    function editRule(id) {
+        fetch(`/api/alert-rules`)
+            .then(r => r.json())
+            .then(rules => {
+                const rule = rules.find(r => r.id === id);
+                if (!rule) return;
+                
+                document.getElementById('ruleModalTitle').textContent = 'Editar Regla';
+                document.getElementById('ruleId').value = rule.id;
+                document.getElementById('ruleName').value = rule.name;
+                document.getElementById('ruleSource').value = rule.source;
+                document.getElementById('ruleChannel').value = rule.channel_id || '';
+                document.getElementById('ruleAlertType').value = rule.alert_type;
+                document.getElementById('ruleAction').value = rule.action;
+                document.getElementById('rulePriority').value = rule.priority;
+                document.getElementById('ruleCooldown').value = rule.cooldown_seconds;
+                document.getElementById('ruleNotifyTelegram').checked = rule.notify_telegram;
+                document.getElementById('ruleNotifyCms').checked = rule.notify_cms;
+                document.getElementById('ruleMessage').value = rule.custom_message || '';
+                ruleModal.show();
             });
-        }
+    }
+    
+    function saveRule() {
+        const id = document.getElementById('ruleId').value;
+        const data = {
+            name: document.getElementById('ruleName').value,
+            source: document.getElementById('ruleSource').value,
+            channel_id: document.getElementById('ruleChannel').value || null,
+            alert_type: document.getElementById('ruleAlertType').value,
+            action: document.getElementById('ruleAction').value,
+            priority: parseInt(document.getElementById('rulePriority').value),
+            cooldown_seconds: parseInt(document.getElementById('ruleCooldown').value),
+            notify_telegram: document.getElementById('ruleNotifyTelegram').checked,
+            notify_cms: document.getElementById('ruleNotifyCms').checked,
+            custom_message: document.getElementById('ruleMessage').value || null,
+        };
         
-        function showCreateModal() {
-            document.getElementById('ruleModalTitle').textContent = 'Nueva Regla';
-            document.getElementById('ruleId').value = '';
-            document.getElementById('ruleForm').reset();
-            document.getElementById('ruleNotifyTelegram').checked = true;
-            document.getElementById('ruleNotifyCms').checked = true;
-            ruleModal.show();
-        }
+        const url = id ? `/api/alert-rules/${id}` : '/api/alert-rules';
+        const method = id ? 'PUT' : 'POST';
         
-        function editRule(id) {
-            fetch(`/api/alert-rules`)
-                .then(r => r.json())
-                .then(rules => {
-                    const rule = rules.find(r => r.id === id);
-                    if (!rule) return;
-                    
-                    document.getElementById('ruleModalTitle').textContent = 'Editar Regla';
-                    document.getElementById('ruleId').value = rule.id;
-                    document.getElementById('ruleName').value = rule.name;
-                    document.getElementById('ruleSource').value = rule.source;
-                    document.getElementById('ruleChannel').value = rule.channel_id || '';
-                    document.getElementById('ruleAlertType').value = rule.alert_type;
-                    document.getElementById('ruleAction').value = rule.action;
-                    document.getElementById('rulePriority').value = rule.priority;
-                    document.getElementById('ruleCooldown').value = rule.cooldown_seconds;
-                    document.getElementById('ruleNotifyTelegram').checked = rule.notify_telegram;
-                    document.getElementById('ruleNotifyCms').checked = rule.notify_cms;
-                    document.getElementById('ruleMessage').value = rule.custom_message || '';
-                    ruleModal.show();
-                });
-        }
-        
-        function saveRule() {
-            const id = document.getElementById('ruleId').value;
-            const data = {
-                name: document.getElementById('ruleName').value,
-                source: document.getElementById('ruleSource').value,
-                channel_id: document.getElementById('ruleChannel').value || null,
-                alert_type: document.getElementById('ruleAlertType').value,
-                action: document.getElementById('ruleAction').value,
-                priority: parseInt(document.getElementById('rulePriority').value),
-                cooldown_seconds: parseInt(document.getElementById('ruleCooldown').value),
-                notify_telegram: document.getElementById('ruleNotifyTelegram').checked,
-                notify_cms: document.getElementById('ruleNotifyCms').checked,
-                custom_message: document.getElementById('ruleMessage').value || null,
-            };
-            
-            const url = id ? `/api/alert-rules/${id}` : '/api/alert-rules';
-            const method = id ? 'PUT' : 'POST';
-            
-            fetch(url, {
-                method: method,
-                headers: {'Content-Type': 'application/json'},
-                body: JSON.stringify(data)
-            })
+        fetch(url, {
+            method: method,
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(data)
+        })
+        .then(r => r.json())
+        .then(result => {
+            if (result.status === 'created' || result.status === 'updated') {
+                location.reload();
+            } else {
+                alert('Error: ' + (result.detail || 'Error desconocido'));
+            }
+        })
+        .catch(e => alert('Error de red: ' + e));
+    }
+    
+    function toggleRule(id) {
+        fetch(`/api/alert-rules/${id}/toggle`, {method: 'POST'})
             .then(r => r.json())
             .then(result => {
-                if (result.status === 'created' || result.status === 'updated') {
-                    location.reload();
-                } else {
-                    alert('Error: ' + (result.detail || 'Error desconocido'));
-                }
-            })
-            .catch(e => alert('Error de red: ' + e));
-        }
-        
-        function toggleRule(id) {
-            fetch(`/api/alert-rules/${id}/toggle`, {method: 'POST'})
-                .then(r => r.json())
-                .then(result => {
-                    if (result.status === 'toggled') location.reload();
-                });
-        }
-        
-        function deleteRule(id, name) {
-            if (!confirm(`¿Eliminar la regla "${name}"?`)) return;
-            fetch(`/api/alert-rules/${id}`, {method: 'DELETE'})
-                .then(r => r.json())
-                .then(result => {
-                    if (result.status === 'deleted') location.reload();
-                });
-        }
-    </script>
-</body>
-</html>
+                if (result.status === 'toggled') location.reload();
+            });
+    }
+    
+    function deleteRule(id, name) {
+        if (!confirm(`¿Eliminar la regla "${name}"?`)) return;
+        fetch(`/api/alert-rules/${id}`, {method: 'DELETE'})
+            .then(r => r.json())
+            .then(result => {
+                if (result.status === 'deleted') location.reload();
+            });
+    }
+</script>
+{% endblock %}
