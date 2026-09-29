@@ -1,5 +1,11 @@
 # Changelog — Encoder Orchestrator
 
+## v2.18.2 (29 Sep 2026) — Issue #9: Fix alert_rules.html usa base.html
+
+- Fix: `templates/alert_rules.html` — reescrito para usar `{% extends "base.html" %}` como el resto de páginas
+- Fix: eliminada sidebar duplicada del template
+- Issue: https://github.com/eskiconce/Mgo_Orquestador/issues/9
+
 ## v2.18.1 (29 Sep 2026) — Issue #8: Fix navegación + import Request
 
 - Fix: `templates/base.html` — agregado menú "Reglas Alertas" para admin/operator
