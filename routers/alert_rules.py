@@ -1,7 +1,7 @@
 """
 Router de reglas de alertas — CRUD para gestión de reglas configurables.
 """
-from fastapi import APIRouter, Depends, HTTPException, Form
+from fastapi import APIRouter, Depends, HTTPException, Request, Form
 from sqlalchemy.orm import Session
 from typing import Optional, List
 from pydantic import BaseModel
@@ -206,7 +206,7 @@ def toggle_alert_rule(rule_id: int, db: Session = Depends(get_db), current_user:
 # --- Frontend UI ---
 
 @router.get("/ui/alert-rules")
-def alert_rules_ui(request, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
+def alert_rules_ui(request: Request, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     """Página de gestión de reglas de alertas."""
     from core.deps import templates
     
