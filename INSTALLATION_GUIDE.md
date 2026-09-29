@@ -11,10 +11,11 @@
 7. [Despliegue](#7-despliegue)
 8. [Agentes Encoder](#8-agentes-encoder)
 9. [Monitoreo](#9-monitoreo)
-10. [API Reference](#10-api-reference)
-11. [Desarrollo](#11-desarrollo)
-12. [Troubleshooting](#12-troubleshooting)
-13. [Changelog](#13-changelog)
+10. [Reglas de Alertas](#10-reglas-de-alertas)
+11. [API Reference](#11-api-reference)
+12. [Desarrollo](#12-desarrollo)
+13. [Troubleshooting](#13-troubleshooting)
+14. [Changelog](#14-changelog)
 
 ---
 
@@ -28,6 +29,7 @@
 - Generación automática de scripts FFmpeg/Shaka Packager por canal
 - Monitoreo continuo con detección de reinicios, drop frames y discontinuidades
 - Recovery automático de jobs caídos
+- **Sistema de reglas configurable para alertas de plataformas externas**
 - Integración DRM/KMS (rotación de llaves, health/stats)
 - Failover de señal offline
 - Autenticación JWT + RBAC (admin / operator / viewer)
@@ -35,7 +37,7 @@
 
 ### Versión actual
 
-- **v2.17.2** (26 Sep 2026)
+- **v2.18.1** (29 Sep 2026)
 - Python 3.9+
 - FastAPI + SQLAlchemy + MySQL
 
@@ -245,17 +247,21 @@ Mgo_Orquestador/
 │   ├── orchestrator.py        # Orquestación de jobs
 │   ├── internal.py            # Endpoints internos
 │   ├── ui_logs.py             # Logs UI
-│   └── health.py              # Health checks y métricas
+│   ├── health.py              # Health checks y métricas
+│   └── alert_rules.py         # CRUD reglas de alertas
 ├── services/
 │   ├── builders.py            # Generadores de scripts FFmpeg/Shaka
 │   ├── vod_service.py         # Webhooks y limpieza VOD
-│   └── cms_gateway.py         # Integración con CMS
+│   ├── cms_gateway.py         # Integración con CMS
+│   ├── alert_normalizer.py    # Normalización de alertas externas
+│   └── alert_rule_engine.py   # Motor de reglas de alertas
 ├── utils/
 │   └── helpers.py             # Filtros Jinja2 y utilidades
 ├── scripts/
 │   ├── run_migrations.py      # Sistema de migraciones
 │   └── migrations/            # Archivos SQL de migración
-│       └── 001_*.sql          # Migraciones numeradas
+│       ├── 001_*.sql          # Migración uptime tracking
+│       └── 002_*.sql          # Migración alert rules
 ├── templates/                 # Frontend server-rendered (Jinja2)
 ├── static/                    # Archivos estáticos
 ├── tests/                     # Suite pytest
@@ -270,6 +276,7 @@ Mgo_Orquestador/
 ├── .env.example               # Plantilla de variables
 ├── .gitignore                 # Archivos ignorados por git
 ├── README.md                  # Documentación principal
+├── INSTALLATION_GUIDE.md      # Esta guía
 └── CHANGELOG.md               # Historial de versiones
 ```
 
@@ -307,6 +314,7 @@ python scripts/run_migrations.py
 | `monitor_logs` | Logs del monitor |
 | `signal_analyses` | Historial de análisis de señal |
 | `encoder_health` | Health de encoders |
+| `alert_rules` | Reglas de alertas configurables |
 | `schema_migrations` | Tracking de migraciones |
 
 ---
@@ -473,9 +481,55 @@ El monitor ejecuta un loop cada `POLL_INTERVAL` segundos (default: 10s):
 
 ---
 
-## 10. API Reference
+## 10. Reglas de Alertas
 
-### 10.1 Health endpoints
+### 10.1 Descripción
+
+El sistema de reglas permite configurar qué acción ejecutar al recibir alertas de plataformas externas (tsmonitor, packager, encoder, etc.).
+
+### 10.2 Acciones disponibles
+
+| Acción | Descripción |
+|--------|-------------|
+| `stop_encoder` | Detiene el encoder del canal |
+| `start_encoder` | Inicia el encoder del canal |
+| `restart_encoder` | Reinicia el encoder del canal |
+| `notify_only` | Solo registra log y notifica |
+| `failover` | Activa failover a señal de respaldo |
+
+### 10.3 Prioridad de búsqueda
+
+1. **Regla específica** — source + channel_id + alert_type
+2. **Regla global source** — source + channel_id=NULL + alert_type
+3. **Regla global total** — source=NULL + channel_id=NULL + alert_type
+4. **Comportamiento default** — hardcodeado
+
+### 10.4 Gestión de reglas
+
+**UI:** `https://admin.mundogo.cl/ui/alert-rules`
+
+**API:**
+
+| Endpoint | Método | Descripción |
+|----------|--------|-------------|
+| `/api/alert-rules` | GET | Listar reglas |
+| `/api/alert-rules` | POST | Crear regla |
+| `/api/alert-rules/{id}` | PUT | Actualizar regla |
+| `/api/alert-rules/{id}` | DELETE | Eliminar regla |
+| `/api/alert-rules/{id}/toggle` | POST | Habilitar/deshabilitar |
+
+### 10.5 Migración
+
+```bash
+# Ejecutar migración de alert rules
+python scripts/run_migrations.py
+```
+
+---
+
+## 11. API Reference
+
+### 11.1 Health endpoints
 
 | Endpoint | Método | Descripción |
 |----------|--------|-------------|
@@ -483,7 +537,7 @@ El monitor ejecuta un loop cada `POLL_INTERVAL` segundos (default: 10s):
 | `/api/health/ready` | GET | Readiness probe |
 | `/api/metrics` | GET | Métricas detalladas |
 
-### 10.2 Autenticación
+### 11.2 Autenticación
 
 | Endpoint | Método | Descripción |
 |----------|--------|-------------|
@@ -492,7 +546,7 @@ El monitor ejecuta un loop cada `POLL_INTERVAL` segundos (default: 10s):
 | `/ui/users/save` | POST | Crear/editar usuario |
 | `/ui/users/delete/{id}` | GET | Eliminar usuario |
 
-### 10.3 Nodos
+### 11.3 Nodos
 
 | Endpoint | Método | Descripción |
 |----------|--------|-------------|
@@ -500,7 +554,7 @@ El monitor ejecuta un loop cada `POLL_INTERVAL` segundos (default: 10s):
 | `/ui/nodes/new` | GET | Formulario nuevo nodo |
 | `/ui/nodes/edit/{id}` | GET | Formulario editar nodo |
 
-### 10.4 Canales
+### 11.4 Canales
 
 | Endpoint | Método | Descripción |
 |----------|--------|-------------|
@@ -508,7 +562,7 @@ El monitor ejecuta un loop cada `POLL_INTERVAL` segundos (default: 10s):
 | `/ui/channels/new` | GET | Formulario nuevo canal |
 | `/ui/channels/edit/{id}` | GET | Formulario editar canal |
 
-### 10.5 Procesos
+### 11.5 Procesos
 
 | Endpoint | Método | Descripción |
 |----------|--------|-------------|
@@ -517,7 +571,14 @@ El monitor ejecuta un loop cada `POLL_INTERVAL` segundos (default: 10s):
 | `/orchestrator/stop-job/{id}` | POST | Detener job |
 | `/orchestrator/restart-job/{id}` | POST | Reiniciar job |
 
-### 10.6 Endpoints internos
+### 11.6 Alertas externas
+
+| Endpoint | Método | Descripción |
+|----------|--------|-------------|
+| `/api/alertas/tsmonitor` | POST | Recibir alerta TSMonitor |
+| `/api/alertas/packager` | POST | Recibir alerta Packager |
+
+### 11.7 Endpoints internos
 
 | Endpoint | Método | Descripción |
 |----------|--------|-------------|
@@ -528,26 +589,26 @@ El monitor ejecuta un loop cada `POLL_INTERVAL` segundos (default: 10s):
 
 ---
 
-## 11. Desarrollo
+## 12. Desarrollo
 
-### 11.1 Ejecutar tests
+### 12.1 Ejecutar tests
 
 ```bash
 pytest
 ```
 
-### 11.2 Bump de versión
+### 12.2 Bump de versión
 
 ```bash
 python bump_version.py
 ```
 
-### 11.3 Branches
+### 12.3 Branches
 
 - `main` — Rama de producción
 - No se usan feature branches (deploy directo a main)
 
-### 11.4 Convenciones
+### 12.4 Convenciones
 
 - **Versionado:** SemVer (MAJOR.MINOR.PATCH)
 - **Commits:** Convención de conventional commits
@@ -556,21 +617,21 @@ python bump_version.py
 
 ---
 
-## 12. Troubleshooting
+## 13. Troubleshooting
 
-### 12.1 Error 429 "Demasiadas solicitudes"
+### 13.1 Error 429 "Demasiadas solicitudes"
 
 **Causa:** Rate limit excedido (300 req/min por IP)
 
 **Solución:** Los endpoints `/ui/`, `/api/internal/`, `/api/health` están excluidos. Si persiste, verificar que el servicio fue reiniciado con la última versión.
 
-### 12.2 Error "name 'datetime' is not defined"
+### 13.2 Error "name 'datetime' is not defined"
 
 **Causa:** Import faltante en `monitor/__init__.py`
 
 **Solución:** Verificar que `from datetime import datetime` esté en las imports de `monitor/__init__.py`
 
-### 12.3 Monitor no inicia
+### 13.3 Monitor no inicia
 
 **Causa:** Error en imports o conexión a BD
 
@@ -583,7 +644,7 @@ journalctl -u encoder-monitor.service -f
 python3 -c "from database import verify_db_connection; verify_db_connection()"
 ```
 
-### 12.4 Jobs quedan en "error"
+### 13.4 Jobs quedan en "error"
 
 **Causa:** Agente no responde o proceso cayó
 
@@ -596,7 +657,7 @@ curl -s -H 'x-api-key: API_KEY' http://IP_NODO:8000/health
 sshpass -p 'PASSWORD' ssh soporte@IP_NODO "launchctl unload ~/Library/LaunchAgents/com.mundogo.encoderagent.plist && launchctl load ~/Library/LaunchAgents/com.mundogo.encoderagent.plist"
 ```
 
-### 12.5 Error "connection refused" en monitor
+### 13.5 Error "connection refused" en monitor
 
 **Causa:** Agente no está corriendo
 
@@ -612,7 +673,18 @@ ps aux | grep uvicorn
 
 ---
 
-## 13. Changelog
+## 14. Changelog
+
+### v2.18.1 (29 Sep 2026)
+- Fix: navegación "Reglas Alertas" en base.html
+- Fix: import Request en alert_rules.py
+
+### v2.18.0 (29 Sep 2026)
+- Nuevo: sistema de reglas configurable para alertas externas
+- Nuevo: modelo AlertRule con tabla alert_rules
+- Nuevo: normalizador multi-plataforma
+- Nuevo: motor de reglas con cooldown
+- Nuevo: CRUD de reglas (API + UI)
 
 ### v2.17.2 (26 Sep 2026)
 - Fix: import faltante de `datetime` en `monitor/__init__.py`
@@ -628,21 +700,6 @@ ps aux | grep uvicorn
 - Nuevo: `scripts/run_migrations.py` para migraciones de esquema
 - Nuevo: `monitor/` paquete modularizado (6 módulos)
 - Nuevo: `README.md` con documentación completa
-
-### v2.16.3 (21 Sep 2026)
-- Nuevo: detección de reinicios de encoder via uptime tracking
-- Nuevo: recovery automático post-reinicio
-
-### v2.16.2 (14 Sep 2026)
-- Nuevo: monitoreo de drop frames
-- Fix: buffer_size diferenciado por plataforma
-
-### v2.16.1 (14 Sep 2026)
-- Fix: packager se reinicia cuando encoder se auto-reinicia
-
-### v2.16.0 (02 Sep 2026)
-- Nuevo: endpoint `/api/internal/encoder-restart`
-- Nuevo: `signal_analyzer.py` acepta `--restart-callback-url`
 
 ---
 
