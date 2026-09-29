@@ -1,5 +1,20 @@
 # Changelog — Encoder Orchestrator
 
+## v2.18.0 (29 Sep 2026) — Issue #7: Sistema de reglas configurable para alertas
+
+- Nuevo: modelo `AlertRule` — reglas configurables para alertas de plataformas externas
+- Nuevo: tabla `alert_rules` con reglas por defecto (comportamiento actual preservado)
+- Nuevo: `services/alert_normalizer.py` — normalización de alertas a formato interno unificado
+- Nuevo: `services/alert_rule_engine.py` — motor de reglas con búsqueda por prioridad y cooldown
+- Nuevo: `routers/alert_rules.py` — CRUD completo para gestión de reglas (API + UI)
+- Nuevo: `/ui/alert-rules` — interfaz de configuración de reglas con filtros
+- Modificado: `services/vod_service.py` — endpoint tsmonitor ahora usa motor de reglas
+- Modificado: `main.py` — registro de router alert_rules
+- Nuevo: `scripts/migrations/002_add_alert_rules.sql` — migración con reglas por defecto
+- Nuevo: `docs/alert-rules-workflow.html` — diagrama de flujo interactivo
+- Nuevo: `docs/alert-rules-diagram.md` — diagrama Mermaid
+- Issue: https://github.com/eskiconce/Mgo_Orquestador/issues/7
+
 ## v2.17.2 (26 Sep 2026) — Fix: Rate limit + import datetime
 
 - Fix: `monitor/__init__.py` — import faltante de `datetime` causaba `NameError` en el loop de monitoreo
