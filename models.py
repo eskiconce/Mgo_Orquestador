@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, Text, ForeignKey, DateTime, Float, DECIMAL, Enum, JSON
+from sqlalchemy import Column, Integer, String, Boolean, Text, ForeignKey, DateTime, Float, DECIMAL, Enum, JSON, UniqueConstraint
 from sqlalchemy.orm import relationship, backref
 from database import Base
 from datetime import datetime
@@ -313,4 +313,28 @@ class AlertRule(Base):
 
     # Relación
     channel = relationship("Channel")
+
+
+class AppSetting(Base):
+    __tablename__ = "app_settings"
+
+    id = Column(Integer, primary_key=True, index=True)
+    section = Column(String(50), nullable=False)
+    key = Column(String(100), nullable=False)
+    value = Column(Text, nullable=True)
+
+    __table_args__ = (UniqueConstraint("section", "key", name="uq_section_key"),)
+
+
+class AlertSource(Base):
+    __tablename__ = "alert_sources"
+
+    id = Column(Integer, primary_key=True, index=True)
+    slug = Column(String(50), unique=True, nullable=False)
+    name = Column(String(100), nullable=False)
+    token = Column(String(64), nullable=False)
+    enabled = Column(Boolean, default=True)
+    description = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=datetime.now)
+    updated_at = Column(DateTime, default=datetime.now, onupdate=datetime.now)
 
