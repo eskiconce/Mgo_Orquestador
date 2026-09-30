@@ -2424,6 +2424,16 @@ ssh -i ~/.ssh/id_opencode oymservice@172.16.223.5 \
 
 Expected: fila `telegram/enabled` con value `1`.
 
+- [ ] **Step 4c: Verificar .env vs seeds antes de reiniciar (hallazgo review final)**
+
+```bash
+ssh -i ~/.ssh/id_opencode oymservice@172.16.223.5 \
+  "grep -E '^(AGENT_API_KEY|CMS_REAL_WEBHOOK)=' /opt/encoder-orchestrator/.env"
+mysql: SELECT section,`key`,value FROM app_settings WHERE (section='security' AND `key`='api_key') OR (section='cms' AND `key`='webhook_url');
+```
+
+Si algún valor difiere del seed, `UPDATE app_settings SET value='<valor .env>' WHERE ...` (la BD debe reflejar el .env vigente, no al revés), antes de reiniciar.
+
 - [ ] **Step 5: Reiniciar servicios**
 
 ```bash
