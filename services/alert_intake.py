@@ -5,7 +5,6 @@ endpoint genérico /api/fuentes/{slug}/alertas.
 """
 import httpx
 import atexit
-from datetime import datetime
 from typing import Union
 
 from sqlalchemy.orm import Session
@@ -23,7 +22,7 @@ class ChannelNotFound(Exception):
 
 _http = httpx.Client(
     limits=httpx.Limits(max_connections=50, max_keepalive_connections=20),
-    timeout=httpx.Timeout(connect=5.0, read=30.0, write=5.0, pool=5.0)
+    timeout=httpx.Timeout(connect=5.0, read=30.0, write=30.0, pool=5.0)
 )
 atexit.register(_http.close)
 

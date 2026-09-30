@@ -3,7 +3,6 @@ Tests del intake de alertas: tsmonitor (refactor) + endpoint genérico de fuente
 """
 import pytest
 import models
-from services.settings_service import save_section
 
 
 @pytest.fixture(name="canal")
@@ -24,12 +23,19 @@ def fixture_fuente(db_session):
 
 class TestTsmonitorPreserved:
 
+    def test_alert_intake_imported_at_module_level(self):
+        # ImportError de alert_intake debe fallar al arrancar, nunca 500 por request
+        import services.vod_service as vs
+        assert callable(vs.handle_tsmonitor_style_alert)
+        assert issubclass(vs.ChannelNotFound, Exception)
+
     def test_tsmonitor_unknown_channel_returns_error_dict(self, client):
         resp = client.post("/api/alertas/tsmonitor",
                            json={"num_canal": 999999, "fecha": "2026-09-29",
                                  "hora": "10:00:00", "status": "freeze"})
         assert resp.status_code == 200
         data = resp.json()
+        assert set(data.keys()) == {"status", "message"}
         assert data["status"] == "error"
         assert "no encontrado" in data["message"]
 
@@ -39,6 +45,7 @@ class TestTsmonitorPreserved:
                                  "hora": "10:00:00", "status": "freeze"})
         assert resp.status_code == 200
         data = resp.json()
+        assert set(data.keys()) == {"status", "message", "rule", "action_taken"}
         assert data["status"] == "success"
         assert data["action_taken"] is False  # sin reglas configuradas
 
@@ -50,6 +57,7 @@ class TestGenericSourceEndpoint:
                            json={"num_canal": 1, "fecha": "2026-09-29",
                                  "hora": "10:00:00", "status": "freeze"})
         assert resp.status_code == 404
+        assert resp.json()["error"] == "Fuente no registrada"
 
     def test_wrong_token_403(self, client, fuente):
         resp = client.post("/api/fuentes/mi-fuente/alertas",
@@ -57,21 +65,25 @@ class TestGenericSourceEndpoint:
                            json={"num_canal": "777", "fecha": "2026-09-29",
                                  "hora": "10:00:00", "status": "freeze"})
         assert resp.status_code == 403
+        assert resp.json()["error"] == "Token de fuente inválido"
 
     def test_missing_token_403(self, client, fuente):
         resp = client.post("/api/fuentes/mi-fuente/alertas",
                            json={"num_canal": "777", "fecha": "2026-09-29",
                                  "hora": "10:00:00", "status": "freeze"})
         assert resp.status_code == 403
+        assert resp.json()["error"] == "Token de fuente inválido"
 
     def test_disabled_source_403(self, client, db_session, fuente):
         fuente.enabled = False
         db_session.commit()
+        # token inválido: deshabilitada debe ganar (orden: enabled antes que token)
         resp = client.post("/api/fuentes/mi-fuente/alertas",
-                           headers={"x-api-key": "t" * 32},
+                           headers={"x-api-key": "wrong"},
                            json={"num_canal": "777", "fecha": "2026-09-29",
                                  "hora": "10:00:00", "status": "freeze"})
         assert resp.status_code == 403
+        assert resp.json()["error"] == "Fuente deshabilitada"
 
     def test_channel_not_found_404(self, client, fuente):
         resp = client.post("/api/fuentes/mi-fuente/alertas",
@@ -79,6 +91,7 @@ class TestGenericSourceEndpoint:
                            json={"num_canal": 424242, "fecha": "2026-09-29",
                                  "hora": "10:00:00", "status": "down"})
         assert resp.status_code == 404
+        assert "no encontrado" in resp.json()["error"]
 
     def test_happy_path_enters_rule_engine(self, client, db_session, canal, fuente):
         rule = models.AlertRule(name="Regla Mi Fuente", source="mi-fuente",

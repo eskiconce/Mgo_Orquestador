@@ -9,6 +9,7 @@ import models
 from database import get_db
 from core.config import CMS_REAL_WEBHOOK, ORCHESTRATOR_WEBHOOK_URL, VOD_API_PORT
 from services.settings_service import get_api_key
+from services.alert_intake import handle_tsmonitor_style_alert, ChannelNotFound
 from core.logging_service import logger
 from utils.helpers import sync_haproxy_vod_map, verify_cms_token, log_monitor_event
 from fastapi import Request
@@ -443,7 +444,6 @@ class TSMonitorAlert(BaseModel):
 # --- ENDPOINT RECEPTOR (v2 — usa motor de reglas) ---
 @router.post("/api/alertas/tsmonitor")
 def receive_tsmonitor_alert(payload: TSMonitorAlert, db: Session = Depends(get_db)):
-    from services.alert_intake import handle_tsmonitor_style_alert, ChannelNotFound
     try:
         return handle_tsmonitor_style_alert(
             db, source="tsmonitor", reporter="TSMonitor",
@@ -475,7 +475,6 @@ def receive_source_alert(slug: str, payload: SourceAlertPayload,
                          x_api_key: Union[str, None] = Header(default=None)):
     """Alerta de fuente registrada en Parámetros Generales (token por fuente)."""
     import secrets as _secrets
-    from services.alert_intake import handle_tsmonitor_style_alert, ChannelNotFound
 
     src = db.query(models.AlertSource).filter(models.AlertSource.slug == slug).first()
     if not src:
