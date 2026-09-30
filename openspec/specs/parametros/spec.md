@@ -1,7 +1,7 @@
 # parametros Specification
 
 ## Purpose
-TBD - created by archiving change parametros-generales. Update Purpose after archive.
+Definir el comportamiento del menú "Parámetros Generales": almacenamiento de parámetros de plataforma en `app_settings` (clave-valor por sección con fallback a defaults), API-key global editable con efecto inmediato, toggles de notificaciones Telegram/CMS, configuración de correo (SMTP/Microsoft Graph), CRUD de fuentes de alerta con token por fuente e ingesta genérica de alertas, y alimentación del `source` de las reglas de alerta desde la BD.
 
 ## Requirements
 
