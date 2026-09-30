@@ -35,10 +35,6 @@
     <div class="col-md-3">
         <select class="form-select form-select-sm" id="filterSource" onchange="filterRules()">
             <option value="">Todas las fuentes</option>
-            <option value="tsmonitor">TSMonitor</option>
-            <option value="packager">Packager</option>
-            <option value="encoder">Encoder</option>
-            <option value="any">Any</option>
         </select>
     </div>
     <div class="col-md-3">
@@ -163,10 +159,6 @@
                             <div class="mb-3">
                                 <label class="form-label">Fuente</label>
                                 <select class="form-select" id="ruleSource" required>
-                                    <option value="tsmonitor">TSMonitor</option>
-                                    <option value="packager">Packager</option>
-                                    <option value="encoder">Encoder</option>
-                                    <option value="any">Any (Global)</option>
                                 </select>
                             </div>
                         </div>
@@ -340,5 +332,22 @@
                 if (result.status === 'deleted') location.reload();
             });
     }
+</script>
+<script>
+async function loadRuleSources() {
+    try {
+        const resp = await fetch('/api/alert-rules/sources');
+        if (!resp.ok) return;
+        const sources = await resp.json();
+        const filter = document.getElementById('filterSource');
+        const ruleSel = document.getElementById('ruleSource');
+        sources.forEach(s => {
+            const label = s.enabled ? s.name : s.name + ' (deshabilitada)';
+            filter.insertAdjacentHTML('beforeend', `<option value="${s.slug}">${label}</option>`);
+            ruleSel.insertAdjacentHTML('beforeend', `<option value="${s.slug}">${label}</option>`);
+        });
+    } catch (e) { console.error('Error cargando fuentes:', e); }
+}
+loadRuleSources();
 </script>
 {% endblock %}

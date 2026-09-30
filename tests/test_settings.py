@@ -243,3 +243,74 @@ class TestSettingsUI:
         assert "paramsDropdown" in resp.text
         assert 'href="/ui/users"' in resp.text
         assert 'href="/ui/settings"' in resp.text
+
+
+class TestRulesSources:
+
+    def test_sources_endpoint_includes_any(self, admin_client):
+        resp = admin_client.get("/api/alert-rules/sources")
+        assert resp.status_code == 200
+        slugs = [s["slug"] for s in resp.json()]
+        assert "any" in slugs
+
+    def test_sources_endpoint_lists_db_rows(self, admin_client):
+        admin_client.post("/api/alert-sources", json={"name": "Nueva Fuente"})
+        slugs = [s["slug"] for s in admin_client.get("/api/alert-rules/sources").json()]
+        assert "nueva-fuente" in slugs
+
+    def test_sources_endpoint_allows_operator(self, operator_client):
+        assert operator_client.get("/api/alert-rules/sources").status_code == 200
+
+    def test_sources_endpoint_forbids_viewer(self, client, db_session):
+        from core.deps import create_access_token
+        user = models.User(username="viewer_t", full_name="Viewer Test",
+                           email="viewer_t@test.cl", hashed_password="x",
+                           role="viewer", disabled=False)
+        db_session.add(user)
+        db_session.commit()
+        token = create_access_token({"sub": "viewer_t"})
+        client.cookies.set("access_token", f"Bearer {token}")
+        assert client.get("/api/alert-rules/sources").status_code == 403
+        client.cookies.clear()
+
+    def test_create_rule_with_db_source_ok(self, admin_client):
+        admin_client.post("/api/alert-sources", json={"name": "Fuente Regla"})
+        resp = admin_client.post("/api/alert-rules", json={
+            "name": "R1", "source": "fuente-regla", "alert_type": "down",
+            "action": "notify_only", "enabled": True, "priority": 10,
+            "cooldown_seconds": 60,
+        })
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "created"
+
+    def test_create_rule_with_unknown_source_400(self, admin_client):
+        resp = admin_client.post("/api/alert-rules", json={
+            "name": "R2", "source": "no-existe", "alert_type": "down",
+            "action": "notify_only", "enabled": True, "priority": 10,
+            "cooldown_seconds": 60,
+        })
+        assert resp.status_code == 400
+
+    def test_create_rule_any_still_works(self, admin_client):
+        resp = admin_client.post("/api/alert-rules", json={
+            "name": "R3", "source": "any", "alert_type": "freeze",
+            "action": "notify_only", "enabled": True, "priority": 5,
+            "cooldown_seconds": 60,
+        })
+        assert resp.status_code == 200
+
+    def test_update_rule_unknown_source_400(self, admin_client):
+        created = admin_client.post("/api/alert-rules", json={
+            "name": "R4", "source": "any", "alert_type": "down",
+            "action": "notify_only", "enabled": True, "priority": 10,
+            "cooldown_seconds": 60,
+        }).json()
+        resp = admin_client.put(f"/api/alert-rules/{created['id']}",
+                                json={"source": "no-existe"})
+        assert resp.status_code == 400
+
+    def test_rules_page_dropdown_is_dynamic(self, admin_client):
+        resp = admin_client.get("/ui/alert-rules")
+        assert resp.status_code == 200
+        assert "loadRuleSources" in resp.text
+        assert 'value="tsmonitor"' not in resp.text

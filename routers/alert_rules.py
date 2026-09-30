@@ -9,9 +9,15 @@ from datetime import datetime
 
 import models
 from database import get_db
-from core.deps import get_current_user
+from core.deps import get_current_user, require_role
 
 router = APIRouter(tags=["alert-rules"])
+
+
+def _valid_sources(db: Session) -> list:
+    """Sources válidos = slugs en alert_sources + 'any' (desde BD, no hardcoded)."""
+    rows = db.query(models.AlertSource.slug).all()
+    return [r[0] for r in rows] + ["any"]
 
 
 # --- Schemas ---
@@ -77,6 +83,16 @@ def list_alert_rules(db: Session = Depends(get_db), current_user: models.User = 
     ]
 
 
+@router.get("/api/alert-rules/sources")
+def list_alert_sources(db: Session = Depends(get_db),
+                       current_user: models.User = Depends(require_role("admin", "operator"))):
+    """Sources disponibles para el dropdown de reglas: filas de alert_sources + 'any'."""
+    rows = db.query(models.AlertSource).order_by(models.AlertSource.name).all()
+    sources = [{"slug": r.slug, "name": r.name, "enabled": bool(r.enabled)} for r in rows]
+    sources.append({"slug": "any", "name": "Any (Global)", "enabled": True})
+    return sources
+
+
 @router.post("/api/alert-rules")
 def create_alert_rule(rule: AlertRuleCreate, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     """Crea una nueva regla de alertas."""
@@ -84,7 +100,7 @@ def create_alert_rule(rule: AlertRuleCreate, db: Session = Depends(get_db), curr
         raise HTTPException(status_code=403, detail="Solo admin puede crear reglas")
     
     # Validar source
-    valid_sources = ["tsmonitor", "packager", "encoder", "any"]
+    valid_sources = _valid_sources(db)
     if rule.source not in valid_sources:
         raise HTTPException(400, f"Source inválido. Valores válidos: {valid_sources}")
     
@@ -134,7 +150,7 @@ def update_alert_rule(rule_id: int, rule: AlertRuleUpdate, db: Session = Depends
     if rule.name is not None:
         db_rule.name = rule.name
     if rule.source is not None:
-        valid_sources = ["tsmonitor", "packager", "encoder", "any"]
+        valid_sources = _valid_sources(db)
         if rule.source not in valid_sources:
             raise HTTPException(400, f"Source inválido. Valores válidos: {valid_sources}")
         db_rule.source = rule.source
