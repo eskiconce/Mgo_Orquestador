@@ -84,6 +84,26 @@ python scripts/run_migrations.py
 
 Las migraciones se encuentran en `scripts/migrations/` como archivos `.sql` numerados. El sistema crea una tabla `schema_migrations` en BD para tracking.
 
+## Parámetros Generales
+
+Menú **Parámetros Generales → Parámetros** (`/ui/settings`, solo admin) centraliza la configuración en BD (`app_settings`):
+
+| Sección | Contenido |
+|---------|-----------|
+| Seguridad | API-key global editable (cambio efecto inmediato en validaciones y salientes) |
+| Telegram | `bot_token`, `chat_id` + activar/desactivar |
+| Correo | SMTP o Microsoft Graph OAuth + activar/desactivar + botón "Probar envío" |
+| CMS | `webhook_url` + activar/desactivar |
+| Fuentes de alertas | CRUD de fuentes externas con token por fuente (`alert_sources`) |
+
+Fuentes nuevas envían alertas con el mismo formato de TSMonitor:
+
+```bash
+curl -X POST http://<orquestador>:9000/api/fuentes/<slug>/alertas \
+  -H "x-api-key: <token>" -H "Content-Type: application/json" \
+  -d '{"num_canal": 123, "fecha": "2026-09-29", "hora": "10:30:00", "status": "freeze"}'
+```
+
 ## Estructura del proyecto
 
 ```

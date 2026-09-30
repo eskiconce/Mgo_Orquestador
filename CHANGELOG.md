@@ -1,5 +1,21 @@
 # Changelog — Encoder Orchestrator
 
+## v2.19.0 (29 Sep 2026) — Issue #10: Parámetros Generales + fuentes de alertas
+
+- Nuevo: dropdown **Parámetros Generales** en menú (Usuarios + Parámetros; Reglas Alertas y KMS sin cambios)
+- Nuevo: `/ui/settings` — configuración de Telegram, Correo (SMTP | Microsoft Graph OAuth), CMS, API-key global y CRUD de fuentes de alertas
+- Nuevo: tabla `app_settings` — parámetros clave-valor en BD (migración `003_app_settings_alert_sources.sql`)
+- Nuevo: tabla `alert_sources` + CRUD con token por fuente y regeneración
+- Nuevo: endpoint genérico `POST /api/fuentes/{slug}/alertas` — payload estilo TSMonitor, auth `x-api-key` por fuente (404/403 según estado)
+- Nuevo: `services/email_service.py` — envío SMTP (TLS/SSL) y Microsoft Graph (client_credentials) con botón "Probar envío"
+- Nuevo: `services/settings_service.py` — lectura/escritura de parámetros con fallback a defaults
+- Modificado: API-key global migra de `core/config.py` a BD (`security.api_key`) — efecto inmediato, comparación con `compare_digest`, fallback al default
+- Modificado: `notify_telegram` y `notify_cms_channel_status` respetan toggles y parámetros desde BD
+- Modificado: `source` de reglas de alerta alimentado desde `alert_sources` (fin del hardcoded `["tsmonitor","packager","encoder","any"]`)
+- Modificado: `templates/alert_rules.html` — dropdown de fuentes cargado desde API
+- Modificado: ingestión tsmonitor refactorizada a `services/alert_intake.py` (comportamiento idéntico preservado)
+- Issue: https://github.com/eskiconce/Mgo_Orquestador/issues/10
+
 ## v2.18.2 (29 Sep 2026) — Issue #9: Fix alert_rules.html usa base.html
 
 - Fix: `templates/alert_rules.html` — reescrito para usar `{% extends "base.html" %}` como el resto de páginas

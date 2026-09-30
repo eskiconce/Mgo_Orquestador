@@ -37,7 +37,7 @@
 
 ### Versión actual
 
-- **v2.18.1** (29 Sep 2026)
+- **v2.19.0** (29 Sep 2026)
 - Python 3.9+
 - FastAPI + SQLAlchemy + MySQL
 
@@ -280,6 +280,16 @@ Mgo_Orquestador/
 └── CHANGELOG.md               # Historial de versiones
 ```
 
+### 5.3 Parámetros Generales (UI)
+
+`/ui/settings` (admin) permite editar sin deploy:
+
+- **Seguridad:** API-key global (`app_settings.security.api_key`) — BD es fuente única con fallback al default de `core/config.py`.
+- **Telegram:** `enabled`, `bot_token`, `chat_id` — controla `notify_telegram`.
+- **Correo:** `enabled` + modo `auth_mode` (`smtp` con host/puerto/TLS/usuario/contraseña, o `graph` con tenant/client/secret de Microsoft 365) + remitente/destinatarios. Botón "Probar envío" valida la conexión real (el envío automático en alertas llegará en una mejora futura).
+- **CMS:** `enabled` + `webhook_url` — controla `notify_cms_channel_status`.
+- **Fuentes de alertas:** CRUD con token por fuente; endpoint genérico `POST /api/fuentes/{slug}/alertas` (payload `num_canal/fecha/hora/status`, header `x-api-key`). Los endpoints dedicados tsmonitor/packager no usan token.
+
 ---
 
 ## 6. Base de Datos
@@ -316,6 +326,8 @@ python scripts/run_migrations.py
 | `encoder_health` | Health de encoders |
 | `alert_rules` | Reglas de alertas configurables |
 | `schema_migrations` | Tracking de migraciones |
+| `app_settings` | Parámetros de plataforma (telegram, email, cms, security) |
+| `alert_sources` | Fuentes externas de alerta con token |
 
 ---
 
