@@ -143,3 +143,81 @@ class TestNotificationToggles:
         monkeypatch.setattr(ma.httpx, "Client", lambda **kw: FakeClient())
         ma.notify_cms_channel_status(ch.id, "error", "prueba")
         assert posts == ["https://cms.nuevo/webhook"]
+
+
+class TestSettingsAPI:
+
+    def test_api_settings_requires_auth(self, client):
+        # El handler global convierte 401 en redirect 303 a /login (patrón del repo)
+        resp = client.get("/api/settings", allow_redirects=False)
+        assert resp.status_code in (401, 303)
+
+    def test_api_settings_forbidden_for_operator(self, operator_client):
+        assert operator_client.get("/api/settings").status_code == 403
+
+    def test_put_telegram_persists_for_admin(self, admin_client, db_session):
+        resp = admin_client.put("/api/settings/telegram",
+                                json={"values": {"enabled": "1", "bot_token": "ABC", "chat_id": "7"}})
+        assert resp.status_code == 200
+        assert get_setting(db_session, "telegram", "bot_token") == "ABC"
+        got = admin_client.get("/api/settings/telegram").json()
+        assert got["bot_token"] == "ABC"
+
+    def test_put_rejects_unknown_key(self, admin_client):
+        resp = admin_client.put("/api/settings/telegram", json={"values": {"hacker": "x"}})
+        assert resp.status_code == 400
+
+    def test_put_rejects_unknown_section(self, admin_client):
+        assert admin_client.put("/api/settings/nope", json={"values": {"a": "b"}}).status_code == 404
+
+    def test_put_security_short_key_rejected(self, admin_client):
+        resp = admin_client.put("/api/settings/security", json={"values": {"api_key": "corto"}})
+        assert resp.status_code == 400
+
+    def test_put_email_invalid_auth_mode(self, admin_client):
+        resp = admin_client.put("/api/settings/email", json={"values": {"auth_mode": "pigeon"}})
+        assert resp.status_code == 400
+
+    def test_checkbox_normalization(self, admin_client, db_session):
+        admin_client.put("/api/settings/telegram", json={"values": {"enabled": True}})
+        assert get_setting(db_session, "telegram", "enabled") == "1"
+
+    def test_email_test_disabled_returns_error(self, admin_client):
+        resp = admin_client.post("/api/settings/email/test")
+        assert resp.status_code == 200
+        assert resp.json()["status"] == "error"
+
+
+class TestAlertSourcesAPI:
+
+    def test_create_generates_token(self, admin_client, db_session):
+        resp = admin_client.post("/api/alert-sources", json={"name": "Mi Fuente"})
+        assert resp.status_code == 200
+        data = resp.json()
+        assert data["slug"] == "mi-fuente"
+        assert len(data["token"]) == 32
+
+    def test_create_duplicate_slug_conflict(self, admin_client):
+        admin_client.post("/api/alert-sources", json={"name": "Otra"})
+        resp = admin_client.post("/api/alert-sources", json={"name": "otra!"})
+        assert resp.status_code == 409
+
+    def test_sources_require_admin(self, operator_client):
+        assert operator_client.get("/api/alert-sources").status_code == 403
+
+    def test_regenerate_changes_token(self, admin_client):
+        created = admin_client.post("/api/alert-sources", json={"name": "Regen"}).json()
+        resp = admin_client.post(f"/api/alert-sources/{created['id']}/regenerate-token")
+        assert resp.status_code == 200
+        assert resp.json()["token"] != created["token"]
+
+    def test_update_and_delete(self, admin_client):
+        created = admin_client.post("/api/alert-sources", json={"name": "Borrar"}).json()
+        resp = admin_client.put(f"/api/alert-sources/{created['id']}",
+                                json={"enabled": False, "description": "d"})
+        assert resp.status_code == 200
+        assert resp.json()["enabled"] is False
+        resp = admin_client.delete(f"/api/alert-sources/{created['id']}")
+        assert resp.status_code == 200
+        assert admin_client.get("/api/alert-sources").json() == [] or \
+            all(s["id"] != created["id"] for s in admin_client.get("/api/alert-sources").json())
