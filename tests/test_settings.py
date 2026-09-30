@@ -221,3 +221,25 @@ class TestAlertSourcesAPI:
         assert resp.status_code == 200
         assert admin_client.get("/api/alert-sources").json() == [] or \
             all(s["id"] != created["id"] for s in admin_client.get("/api/alert-sources").json())
+
+
+class TestSettingsUI:
+
+    def test_settings_page_renders_for_admin(self, admin_client):
+        resp = admin_client.get("/ui/settings")
+        assert resp.status_code == 200
+        assert "Parámetros Generales" in resp.text
+        assert "Fuentes de alertas" in resp.text
+
+    def test_settings_page_forbidden_for_operator(self, operator_client):
+        assert operator_client.get("/ui/settings").status_code == 403
+
+    def test_settings_page_requires_auth(self, client):
+        resp = client.get("/ui/settings", allow_redirects=False)
+        assert resp.status_code in (401, 303)
+
+    def test_menu_shows_params_dropdown(self, admin_client):
+        resp = admin_client.get("/ui/settings")
+        assert "paramsDropdown" in resp.text
+        assert 'href="/ui/users"' in resp.text
+        assert 'href="/ui/settings"' in resp.text

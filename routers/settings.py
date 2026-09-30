@@ -21,6 +21,17 @@ router = APIRouter(tags=["settings"])
 admin_only = require_role("admin")
 
 
+# --- UI Parámetros Generales ---
+
+@router.get("/ui/settings")
+def settings_ui(request: Request, db: Session = Depends(get_db),
+                current_user: models.User = Depends(admin_only)):
+    settings = {s: get_section(db, s, defaults=d) for s, d in SECTION_DEFAULTS.items()}
+    return templates.TemplateResponse("settings.html", {
+        "request": request, "user": current_user, "settings": settings,
+    })
+
+
 def _normalize_value(key: str, value: Any) -> str:
     if key in ("enabled", "smtp_tls"):
         return "1" if str(value).lower() in ("1", "true", "on", "yes") else "0"
