@@ -55,7 +55,8 @@ def normalize_tsmonitor_alert(
     status: str,
     fecha: str,
     hora: str,
-    channel_id: int
+    channel_id: int,
+    source: str = "tsmonitor"
 ) -> NormalizedAlert:
     """
     Normaliza una alerta de TSMonitor.
@@ -80,7 +81,7 @@ def normalize_tsmonitor_alert(
     alert_type = TSMONITOR_TYPE_MAP.get(status.lower(), "unknown")
 
     return NormalizedAlert(
-        source="tsmonitor",
+        source=source,
         channel_id=channel_id,
         alert_type=alert_type,
         raw_status=status,

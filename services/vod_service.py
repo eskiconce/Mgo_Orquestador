@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, Body
+from fastapi import APIRouter, Depends, Body, Header, HTTPException
 from sqlalchemy.orm import Session
 from datetime import datetime, timedelta
 from pydantic import BaseModel
@@ -443,125 +443,62 @@ class TSMonitorAlert(BaseModel):
 # --- ENDPOINT RECEPTOR (v2 — usa motor de reglas) ---
 @router.post("/api/alertas/tsmonitor")
 def receive_tsmonitor_alert(payload: TSMonitorAlert, db: Session = Depends(get_db)):
+    from services.alert_intake import handle_tsmonitor_style_alert, ChannelNotFound
     try:
-        from services.alert_normalizer import normalize_tsmonitor_alert
-        from services.alert_rule_engine import process_alert
-
-        # 1. Buscar el Canal — por unique_id con fallback a id
-        channel = db.query(models.Channel).filter(
-            models.Channel.unique_id == str(payload.num_canal)
-        ).first()
-
-        if not channel:
-            try:
-                numeric_id = int(payload.num_canal)
-                channel = db.query(models.Channel).filter(
-                    models.Channel.id == numeric_id
-                ).first()
-            except (TypeError, ValueError):
-                channel = None
-
-        if not channel:
-            return {"status": "error", "message": f"Canal {payload.num_canal} no encontrado."}
-
-        # 2. Normalizar alerta a formato interno
-        normalized = normalize_tsmonitor_alert(
-            num_canal=payload.num_canal,
-            status=payload.status,
-            fecha=payload.fecha,
-            hora=payload.hora,
-            channel_id=channel.id
-        )
-
-        # 3. Registrar en monitor_logs
-        alert_entry = models.MonitorLog(
+        return handle_tsmonitor_style_alert(
+            db, source="tsmonitor", reporter="TSMonitor",
             event_type="TSMONITOR_ALERT",
-            message=f"Alerta externa [{payload.status}] para el canal {channel.channel_name}. Reportada por TSMonitor.",
-            node_id=None,
-            timestamp=normalized.timestamp
+            num_canal=payload.num_canal, fecha=payload.fecha,
+            hora=payload.hora, status=payload.status,
         )
-        db.add(alert_entry)
-        db.flush()
-
-        # 4. Procesar con motor de reglas
-        result = process_alert(db, normalized)
-
-        # 5. Si la regla indica ejecutar acción en encoder, hacerlo
-        if result["action_taken"] and result["rule"]:
-            rule_action = result["rule"]["action"]
-            
-            # Buscar job del encoder
-            encoder_job = db.query(models.EncodingJob).join(models.Node).filter(
-                models.EncodingJob.channel_id == channel.id,
-                models.Node.tipo == 'Encoder'
-            ).first()
-
-            if encoder_job and rule_action in ["stop_encoder", "start_encoder", "restart_encoder"]:
-                agent_ip = encoder_job.node.ip_address
-                headers = {"X-API-Key": get_api_key()}
-                prog_name = f"channel_{channel.channel_name}_{encoder_job.id}"
-
-                try:
-                    if rule_action == "stop_encoder" and encoder_job.status in ["running", "starting"]:
-                        url_stop = f"http://{agent_ip}:8000/jobs/control"
-                        _http.post(url_stop, params={"action": "stop", "program_name": prog_name}, headers=headers, timeout=5)
-                        encoder_job.status = "stopped"
-                        encoder_job.auto_started = False
-                        db.add(models.MonitorLog(
-                            event_type="ENCODER_STOPPED",
-                            message=f"Encoder de {channel.channel_name} detenido por regla: {result['rule']['name']}",
-                            node_id=encoder_job.node_id,
-                            timestamp=normalized.timestamp
-                        ))
-                    elif rule_action == "start_encoder" and encoder_job.status in ["stopped", "error"]:
-                        url_start = f"http://{agent_ip}:8000/jobs/create"
-                        payload_start = {
-                            "job_id": encoder_job.id,
-                            "channel_name": channel.channel_name,
-                            "command": encoder_job.command_compress,
-                            "autostart": True
-                        }
-                        _http.post(url_start, json=payload_start, headers=headers, timeout=10)
-                        encoder_job.status = "starting"
-                        db.add(models.MonitorLog(
-                            event_type="ENCODER_STARTED",
-                            message=f"Encoder de {channel.channel_name} iniciado por regla: {result['rule']['name']}",
-                            node_id=encoder_job.node_id,
-                            timestamp=normalized.timestamp
-                        ))
-                    elif rule_action == "restart_encoder":
-                        # Stop first, then start
-                        url_stop = f"http://{agent_ip}:8000/jobs/control"
-                        _http.post(url_stop, params={"action": "stop", "program_name": prog_name}, headers=headers, timeout=5)
-                        url_start = f"http://{agent_ip}:8000/jobs/create"
-                        payload_start = {
-                            "job_id": encoder_job.id,
-                            "channel_name": channel.channel_name,
-                            "command": encoder_job.command_compress,
-                            "autostart": True
-                        }
-                        _http.post(url_start, json=payload_start, headers=headers, timeout=10)
-                        encoder_job.status = "starting"
-                        db.add(models.MonitorLog(
-                            event_type="ENCODER_RESTARTED",
-                            message=f"Encoder de {channel.channel_name} reiniciado por regla: {result['rule']['name']}",
-                            node_id=encoder_job.node_id,
-                            timestamp=normalized.timestamp
-                        ))
-                except Exception as e:
-                    logger.warning(f"Error ejecutando acción en encoder: {e}")
-
-        db.commit()
-        return {
-            "status": "success",
-            "message": result.get("message", "Alerta procesada"),
-            "rule": result.get("rule"),
-            "action_taken": result.get("action_taken", False),
-        }
-
+    except ChannelNotFound as e:
+        return {"status": "error", "message": str(e)}
     except Exception as e:
         db.rollback()
         return {"status": "error", "message": str(e)}
+
+
+# ==========================================
+# INGESTA GENÉRICA DE FUENTES REGISTRADAS
+# ==========================================
+
+class SourceAlertPayload(BaseModel):
+    num_canal: Union[int, str]
+    fecha: str
+    hora: str
+    status: str
+
+
+@router.post("/api/fuentes/{slug}/alertas")
+def receive_source_alert(slug: str, payload: SourceAlertPayload,
+                         db: Session = Depends(get_db),
+                         x_api_key: Union[str, None] = Header(default=None)):
+    """Alerta de fuente registrada en Parámetros Generales (token por fuente)."""
+    import secrets as _secrets
+    from services.alert_intake import handle_tsmonitor_style_alert, ChannelNotFound
+
+    src = db.query(models.AlertSource).filter(models.AlertSource.slug == slug).first()
+    if not src:
+        raise HTTPException(status_code=404, detail="Fuente no registrada")
+    if not src.enabled:
+        raise HTTPException(status_code=403, detail="Fuente deshabilitada")
+    if not x_api_key or not _secrets.compare_digest(x_api_key, src.token):
+        raise HTTPException(status_code=403, detail="Token de fuente inválido")
+
+    try:
+        return handle_tsmonitor_style_alert(
+            db, source=slug, reporter=src.name,
+            event_type=f"EXT_ALERT_{slug.upper()}",
+            num_canal=payload.num_canal, fecha=payload.fecha,
+            hora=payload.hora, status=payload.status,
+        )
+    except ChannelNotFound as e:
+        raise HTTPException(status_code=404, detail=str(e))
+    except HTTPException:
+        raise
+    except Exception as e:
+        db.rollback()
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ---- fin de archivo ---- #
