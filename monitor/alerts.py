@@ -1,6 +1,6 @@
 """
 Monitor — Alerts module.
-CMS notifications and Telegram alerts.
+CMS notifications and Telegram alerts (toggles y parámetros desde app_settings).
 """
 import httpx
 import logging
@@ -10,24 +10,35 @@ from sqlalchemy.orm import Session
 import models
 from core.config import CMS_REAL_WEBHOOK, TELEGRAM_BOT_TOKEN, TELEGRAM_CHAT_ID
 from database import SessionLocal
+from services.settings_service import get_setting
 
 logger = logging.getLogger(__name__)
 
 
 def notify_telegram(message):
-    if not TELEGRAM_BOT_TOKEN or not TELEGRAM_CHAT_ID:
-        return
+    """Envía mensaje a Telegram si telegram.enabled=1 en app_settings."""
+    db = SessionLocal()
     try:
-        url = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage"
-        httpx.post(url, json={"chat_id": TELEGRAM_CHAT_ID, "text": message, "parse_mode": "HTML"}, timeout=10)
+        if get_setting(db, "telegram", "enabled", "0") != "1":
+            return
+        token = get_setting(db, "telegram", "bot_token", "") or TELEGRAM_BOT_TOKEN
+        chat_id = get_setting(db, "telegram", "chat_id", "") or TELEGRAM_CHAT_ID
+        if not token or not chat_id:
+            return
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        httpx.post(url, json={"chat_id": chat_id, "text": message, "parse_mode": "HTML"}, timeout=10)
     except Exception:
         pass
+    finally:
+        db.close()
 
 
 def notify_cms_channel_status(channel_id, status_event, description):
-    """Envía webhook al CMS. Posee su propia sesión de BD (Thread-Safe)."""
+    """Envía webhook al CMS si cms.enabled=1 en app_settings. Posee su propia sesión (Thread-Safe)."""
     db = SessionLocal()
     try:
+        if get_setting(db, "cms", "enabled", "1") != "1":
+            return
         channel = db.query(models.Channel).filter(models.Channel.id == channel_id).first()
         if not channel:
             return
@@ -40,9 +51,10 @@ def notify_cms_channel_status(channel_id, status_event, description):
             "timestamp": datetime.now().isoformat()
         }
 
+        webhook = get_setting(db, "cms", "webhook_url", "") or CMS_REAL_WEBHOOK
         logger.info(f"Notificando al CMS evento '{status_event}' para el canal {payload['canal']}")
         with httpx.Client(timeout=5.0) as client:
-            client.post(CMS_REAL_WEBHOOK, json=payload)
+            client.post(webhook, json=payload)
 
     except Exception as e:
         logger.error(f"Error enviando notificación de estado al CMS: {e}")

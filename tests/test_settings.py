@@ -3,6 +3,7 @@ Tests para settings_service (app_settings clave-valor + API-key).
 """
 import pytest
 from fastapi import HTTPException
+import models
 from core.config import AGENT_API_KEY
 from services.settings_service import get_setting, get_section, save_section, get_api_key
 
@@ -85,3 +86,60 @@ class TestApiKeyOutgoing:
             assert client.headers["X-API-Key"] == "otra_clave_bd"
         finally:
             pass  # cierre async manejado por httpx
+
+
+class TestNotificationToggles:
+
+    def test_telegram_disabled_does_not_send(self, db_session, monkeypatch):
+        import monitor.alerts as ma
+        calls = []
+        monkeypatch.setattr(ma, "SessionLocal", lambda: db_session)
+        monkeypatch.setattr(ma.httpx, "post", lambda *a, **k: calls.append(a) or True)
+        ma.notify_telegram("hola")
+        assert calls == []
+
+    def test_telegram_enabled_sends_with_bd_params(self, db_session, monkeypatch):
+        import monitor.alerts as ma
+        save_section(db_session, "telegram", {"enabled": "1", "bot_token": "TOK123", "chat_id": "42"})
+        calls = []
+        def fake_post(url, **kwargs):
+            calls.append((url, kwargs))
+            return True
+        monkeypatch.setattr(ma, "SessionLocal", lambda: db_session)
+        monkeypatch.setattr(ma.httpx, "post", fake_post)
+        ma.notify_telegram("hola")
+        assert len(calls) == 1
+        assert "TOK123" in calls[0][0]
+        assert calls[0][1]["json"]["chat_id"] == "42"
+
+    def test_cms_disabled_does_not_send(self, db_session, monkeypatch):
+        import monitor.alerts as ma
+        ch = models.Channel(channel_name="Canal Test", unique_id="991")
+        db_session.add(ch)
+        db_session.commit()
+        save_section(db_session, "cms", {"enabled": "0", "webhook_url": "https://x/cl"})
+        posts = []
+        class FakeClient:
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+            def post(self, url, **kw): posts.append(url)
+        monkeypatch.setattr(ma, "SessionLocal", lambda: db_session)
+        monkeypatch.setattr(ma.httpx, "Client", lambda **kw: FakeClient())
+        ma.notify_cms_channel_status(ch.id, "error", "prueba")
+        assert posts == []
+
+    def test_cms_enabled_uses_bd_webhook(self, db_session, monkeypatch):
+        import monitor.alerts as ma
+        ch = models.Channel(channel_name="Canal Test 2", unique_id="992")
+        db_session.add(ch)
+        db_session.commit()
+        save_section(db_session, "cms", {"enabled": "1", "webhook_url": "https://cms.nuevo/webhook"})
+        posts = []
+        class FakeClient:
+            def __enter__(self): return self
+            def __exit__(self, *a): return False
+            def post(self, url, **kw): posts.append(url)
+        monkeypatch.setattr(ma, "SessionLocal", lambda: db_session)
+        monkeypatch.setattr(ma.httpx, "Client", lambda **kw: FakeClient())
+        ma.notify_cms_channel_status(ch.id, "error", "prueba")
+        assert posts == ["https://cms.nuevo/webhook"]
