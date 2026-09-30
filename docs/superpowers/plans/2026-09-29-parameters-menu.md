@@ -2413,6 +2413,17 @@ ssh -i ~/.ssh/id_opencode oymservice@172.16.223.5 \
 
 Expected: `Applied: 003_app_settings_alert_sources.sql`
 
+- [ ] **Step 4b: Habilitar Telegram en BD (decisión humana 2026-09-29)**
+
+El default del plan es `telegram.enabled=0`; para no cortar alertas Telegram existentes en prod, setearlo tras la migración:
+
+```bash
+ssh -i ~/.ssh/id_opencode oymservice@172.16.223.5 \
+  "mysql -u ingservice -p'S3rv1c3.Ingenieria' -D encoder_orchestrator -e \"UPDATE app_settings SET value='1' WHERE section='telegram' AND \\\`key\\\`='enabled'; SELECT * FROM app_settings WHERE section='telegram';\""
+```
+
+Expected: fila `telegram/enabled` con value `1`.
+
 - [ ] **Step 5: Reiniciar servicios**
 
 ```bash
