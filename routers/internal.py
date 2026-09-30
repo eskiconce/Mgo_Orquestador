@@ -8,7 +8,8 @@ import base64, zlib, httpx, requests
 import models
 from database import get_db
 from core.deps import templates, get_current_user
-from core.config import AGENT_PORT, AGENT_API_KEY
+from core.config import AGENT_PORT
+from services.settings_service import get_api_key
 from services import builders
 from utils.helpers import sync_haproxy_map
 from core.logging_service import logger
@@ -17,9 +18,11 @@ from routers.orchestrator import analyze_tasks
 router = APIRouter(tags=["internal"])
 
 
-def verify_api_key(x_api_key: Optional[str] = Header(None)):
-    """Verifica X-API-Key para endpoints internos."""
-    if x_api_key != AGENT_API_KEY:
+def verify_api_key(x_api_key: Optional[str] = Header(None), db: Session = Depends(get_db)):
+    """Verifica X-API-Key para endpoints internos (lee de BD con fallback)."""
+    import secrets
+    from services.settings_service import get_api_key
+    if not x_api_key or not secrets.compare_digest(x_api_key, get_api_key(db)):
         raise HTTPException(status_code=401, detail="API key inválida")
 
 
@@ -82,8 +85,8 @@ async def trigger_failover(channel_id: int, mode: str = "activate", db: Session 
         prog_name = f"pkg_{channel.channel_name}_{job.id}"
         try:
             async with httpx.AsyncClient(timeout=10.0) as client:
-                await client.post(f"http://{job.node.ip_address}:8000/jobs/create", json={"job_id": job.id, "channel_name": channel.channel_name, "command": compressed, "autostart": True}, headers={"X-API-Key": AGENT_API_KEY})
-                await client.post(f"http://{job.node.ip_address}:8000/jobs/control", params={"action": "restart", "program_name": prog_name}, headers={"X-API-Key": AGENT_API_KEY})
+                await client.post(f"http://{job.node.ip_address}:8000/jobs/create", json={"job_id": job.id, "channel_name": channel.channel_name, "command": compressed, "autostart": True}, headers={"X-API-Key": get_api_key()})
+                await client.post(f"http://{job.node.ip_address}:8000/jobs/control", params={"action": "restart", "program_name": prog_name}, headers={"X-API-Key": get_api_key()})
         except Exception:
             pass
     db.commit()
@@ -132,7 +135,7 @@ async def notify_encoder_restart(data: dict = Body(...), db: Session = Depends(g
             prog_name = f"{prefix}_{packager_job.channel.channel_name}_{packager_job.id}"
             url = f"http://{packager_job.node.ip_address}:{AGENT_PORT}/jobs/control"
             resp = requests.post(url, params={"action": "restart", "program_name": prog_name},
-                                 headers={"X-API-Key": AGENT_API_KEY}, timeout=10)
+                                 headers={"X-API-Key": get_api_key()}, timeout=10)
             if resp.status_code == 200:
                 packager_job.started_at = datetime.now()
                 db.commit()

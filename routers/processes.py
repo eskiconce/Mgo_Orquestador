@@ -9,7 +9,8 @@ import requests, re
 import models
 from database import get_db
 from core.deps import templates, get_current_user
-from core.config import AGENT_PORT, AGENT_API_KEY
+from core.config import AGENT_PORT
+from services.settings_service import get_api_key
 from utils.helpers import time_duration, sync_haproxy_map, task_delayed_action
 from core.logging_service import logger
 
@@ -140,7 +141,7 @@ def delete_process(job_id: int, db: Session = Depends(get_db), current_user: mod
     elif job.node.tipo == 'Encoder' and db.query(models.EncodingJob).filter(models.EncodingJob.parent_job_id == job.id).count() > 0:
         raise HTTPException(400, "Borre los Packagers primero.")
     try:
-        requests.delete(f"http://{job.node.ip_address}:{AGENT_PORT}/jobs/delete", params={"program_name": f"{'pkg' if job.node.tipo == 'Packager' else 'channel'}_{job.channel.channel_name}_{job.id}"}, headers={"X-API-Key": AGENT_API_KEY}, timeout=3)
+        requests.delete(f"http://{job.node.ip_address}:{AGENT_PORT}/jobs/delete", params={"program_name": f"{'pkg' if job.node.tipo == 'Packager' else 'channel'}_{job.channel.channel_name}_{job.id}"}, headers={"X-API-Key": get_api_key()}, timeout=3)
     except Exception:
         pass
     db.delete(job)
@@ -157,7 +158,7 @@ def start_process_manual(job_id: int, background_tasks: BackgroundTasks, db: Ses
         if db.query(models.EncodingJob).filter(models.EncodingJob.id == job.parent_job_id, models.EncodingJob.status != 'running').first():
             raise HTTPException(400, "Encoder padre detenido.")
     try:
-        response = requests.post(f"http://{job.node.ip_address}:{AGENT_PORT}/jobs/create", json={"job_id": job.id, "channel_name": job.channel.channel_name, "command": job.command_compress, "autostart": True}, headers={"X-API-Key": AGENT_API_KEY}, timeout=45)
+        response = requests.post(f"http://{job.node.ip_address}:{AGENT_PORT}/jobs/create", json={"job_id": job.id, "channel_name": job.channel.channel_name, "command": job.command_compress, "autostart": True}, headers={"X-API-Key": get_api_key()}, timeout=45)
         if response.status_code != 200:
             raise HTTPException(status_code=response.status_code, detail=response.text)
         job.status, job.started_at = "running", __import__("datetime").datetime.now()
@@ -189,7 +190,7 @@ async def stop_job(job_id: int, db: Session = Depends(get_db), current_user: mod
     import httpx
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            await client.post(f"http://{job.node.ip_address}:{AGENT_PORT}/jobs/control", params={"action": "stop", "program_name": f"{'pkg' if job.node.tipo == 'Packager' else 'channel'}_{job.channel.channel_name}_{job.id}"}, headers={"X-API-Key": AGENT_API_KEY})
+            await client.post(f"http://{job.node.ip_address}:{AGENT_PORT}/jobs/control", params={"action": "stop", "program_name": f"{'pkg' if job.node.tipo == 'Packager' else 'channel'}_{job.channel.channel_name}_{job.id}"}, headers={"X-API-Key": get_api_key()})
     except Exception:
         pass
     job.status = "stopped"
@@ -207,7 +208,7 @@ async def restart_job(job_id: int, background_tasks: BackgroundTasks, db: Sessio
     import httpx
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(f"http://{job.node.ip_address}:{AGENT_PORT}/jobs/control", params={"action": "restart", "program_name": f"{'pkg' if job.node.tipo == 'Packager' else 'channel'}_{job.channel.channel_name}_{job.id}"}, headers={"X-API-Key": AGENT_API_KEY})
+            resp = await client.post(f"http://{job.node.ip_address}:{AGENT_PORT}/jobs/control", params={"action": "restart", "program_name": f"{'pkg' if job.node.tipo == 'Packager' else 'channel'}_{job.channel.channel_name}_{job.id}"}, headers={"X-API-Key": get_api_key()})
             resp.raise_for_status()
         job.started_at = __import__("datetime").datetime.now()
     except httpx.HTTPStatusError as e:
@@ -231,7 +232,7 @@ def move_job(job_id: int = Form(...), new_node_id: int = Form(...), db: Session 
     if db.query(models.EncodingJob).filter(models.EncodingJob.node_id == new_node.id, models.EncodingJob.channel_id == job.channel_id).first():
         raise HTTPException(400, "Canal ya asignado en nodo destino.")
     try:
-        requests.delete(f"http://{job.node.ip_address}:{AGENT_PORT}/jobs/delete", params={"program_name": f"{'pkg' if job.node.tipo == 'Packager' else 'channel'}_{job.channel.channel_name}_{job.id}"}, headers={"X-API-Key": AGENT_API_KEY}, timeout=3)
+        requests.delete(f"http://{job.node.ip_address}:{AGENT_PORT}/jobs/delete", params={"program_name": f"{'pkg' if job.node.tipo == 'Packager' else 'channel'}_{job.channel.channel_name}_{job.id}"}, headers={"X-API-Key": get_api_key()}, timeout=3)
     except Exception:
         pass
     job.node_id, job.node = new_node.id, new_node
@@ -247,10 +248,10 @@ def view_process_logs(job_id: int, request: Request, db: Session = Depends(get_d
     p_name = f"{'pkg' if job.node.tipo == 'Packager' else 'channel'}_{job.channel.channel_name}_{job.id}"
     logs_err, logs_out = {"content": "Conectando..."}, {"content": "Conectando..."}
     try:
-        r_err = requests.get(f"http://{job.node.ip_address}:{AGENT_PORT}/jobs/logs", params={"program_name": p_name, "type": "err", "lines": 100}, headers={"X-API-Key": AGENT_API_KEY}, timeout=3)
+        r_err = requests.get(f"http://{job.node.ip_address}:{AGENT_PORT}/jobs/logs", params={"program_name": p_name, "type": "err", "lines": 100}, headers={"X-API-Key": get_api_key()}, timeout=3)
         if r_err.status_code == 200:
             logs_err = r_err.json()
-        r_out = requests.get(f"http://{job.node.ip_address}:{AGENT_PORT}/jobs/logs", params={"program_name": p_name, "type": "out", "lines": 100}, headers={"X-API-Key": AGENT_API_KEY}, timeout=3)
+        r_out = requests.get(f"http://{job.node.ip_address}:{AGENT_PORT}/jobs/logs", params={"program_name": p_name, "type": "out", "lines": 100}, headers={"X-API-Key": get_api_key()}, timeout=3)
         if r_out.status_code == 200:
             logs_out = r_out.json()
     except Exception as e:
@@ -262,7 +263,7 @@ def view_process_logs(job_id: int, request: Request, db: Session = Depends(get_d
 def api_get_process_logs(job_id: int, type: str = "err", lines: int = 100, db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)):
     job = db.query(models.EncodingJob).filter(models.EncodingJob.id == job_id).first()
     try:
-        r = requests.get(f"http://{job.node.ip_address}:{AGENT_PORT}/jobs/logs", params={"program_name": f"{'pkg' if job.node.tipo == 'Packager' else 'channel'}_{job.channel.channel_name}_{job.id}", "type": type, "lines": lines}, headers={"X-API-Key": AGENT_API_KEY}, timeout=3)
+        r = requests.get(f"http://{job.node.ip_address}:{AGENT_PORT}/jobs/logs", params={"program_name": f"{'pkg' if job.node.tipo == 'Packager' else 'channel'}_{job.channel.channel_name}_{job.id}", "type": type, "lines": lines}, headers={"X-API-Key": get_api_key()}, timeout=3)
         if r.status_code == 200:
             return r.json()
         return {"content": "Esperando conexión..."}

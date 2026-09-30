@@ -3,7 +3,7 @@ Cliente HTTP unificado para el orquestador.
 Proporciona factories para httpx sync/async con configuración estándar.
 """
 import httpx
-from core.config import AGENT_API_KEY
+from services.settings_service import get_api_key
 
 # Configuración estándar de connection pooling
 LIMITS = httpx.Limits(max_connections=50, max_keepalive_connections=20)
@@ -15,7 +15,7 @@ def create_sync_client(**kwargs) -> httpx.Client:
     limits = kwargs.pop("limits", LIMITS)
     timeout = kwargs.pop("timeout", TIMEOUT)
     headers = kwargs.pop("headers", {})
-    headers.setdefault("X-API-Key", AGENT_API_KEY)
+    headers.setdefault("X-API-Key", get_api_key())
     return httpx.Client(limits=limits, timeout=timeout, headers=headers, **kwargs)
 
 
@@ -24,5 +24,5 @@ def create_async_client(**kwargs) -> httpx.AsyncClient:
     limits = kwargs.pop("limits", LIMITS)
     timeout = kwargs.pop("timeout", TIMEOUT)
     headers = kwargs.pop("headers", {})
-    headers.setdefault("X-API-Key", AGENT_API_KEY)
+    headers.setdefault("X-API-Key", get_api_key())
     return httpx.AsyncClient(limits=limits, timeout=timeout, headers=headers, **kwargs)

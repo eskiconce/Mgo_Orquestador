@@ -1,16 +1,20 @@
 from datetime import datetime
 from sqlalchemy.orm import Session
-from fastapi import Header, HTTPException
+from fastapi import Header, HTTPException, Depends
+from database import get_db
 import asyncio
 import httpx
 from concurrent.futures import ThreadPoolExecutor
 
 import models
-from core.config import AGENT_API_KEY, HAPROXY_NODES, HAPROXY_AGENT_PORT
+from core.config import HAPROXY_NODES, HAPROXY_AGENT_PORT
 from core.logging_service import logger
+from services.settings_service import get_api_key
 
-def verify_cms_token(x_api_key: str = Header(...)):
-    if x_api_key != AGENT_API_KEY:
+def verify_cms_token(x_api_key: str = Header(...), db: Session = Depends(get_db)):
+    import secrets
+    from services.settings_service import get_api_key
+    if not secrets.compare_digest(x_api_key, get_api_key(db)):
         raise HTTPException(status_code=403, detail="Token de CMS inválido")
     return x_api_key
 
@@ -40,7 +44,7 @@ def sync_haproxy_vod_map(db: Session):
 
         map_lines.append("default backend_default\n")
         map_content = "\n".join(map_lines)
-        headers = {"X-API-Key": AGENT_API_KEY}
+        headers = {"X-API-Key": get_api_key()}
         payload = {"map_content": map_content}
 
         for haproxy_ip in HAPROXY_NODES:
@@ -81,7 +85,7 @@ def sync_haproxy_map(db: Session):
 
         map_lines.append("default backend_default\n")
         map_content = "\n".join(map_lines)
-        headers = {"X-API-Key": AGENT_API_KEY}
+        headers = {"X-API-Key": get_api_key()}
         payload = {"map_content": map_content}
 
         with ThreadPoolExecutor(max_workers=max(1, len(HAPROXY_NODES))) as executor:
@@ -97,7 +101,7 @@ async def task_delayed_action(action: str, targets: list, delay: int = 15):
     await asyncio.sleep(delay) 
     
     async with httpx.AsyncClient(timeout=30.0) as client:
-        headers = {"X-API-Key": AGENT_API_KEY}
+        headers = {"X-API-Key": get_api_key()}
         for t in targets:
             try:
                 logger.info(f"🚀 (Background Async) Ejecutando {action} en hijo...")

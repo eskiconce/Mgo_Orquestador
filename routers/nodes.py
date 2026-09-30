@@ -6,7 +6,8 @@ import httpx
 import models
 from database import get_db
 from core.deps import templates, get_current_user
-from core.config import AGENT_PORT, AGENT_API_KEY
+from core.config import AGENT_PORT
+from services.settings_service import get_api_key
 
 router = APIRouter(tags=["nodes"])
 
@@ -33,7 +34,7 @@ async def get_node_health(node_id: int, db: Session = Depends(get_db)):
         raise HTTPException(404, "Nodo no encontrado")
     try:
         async with httpx.AsyncClient(timeout=2.0) as client:
-            resp = await client.get(f"http://{node.ip_address}:{AGENT_PORT}/health", headers={"X-API-Key": AGENT_API_KEY})
+            resp = await client.get(f"http://{node.ip_address}:{AGENT_PORT}/health", headers={"X-API-Key": get_api_key()})
             return resp.json()
     except Exception as e:
         return {"status": "offline", "error": str(e)}
@@ -46,7 +47,7 @@ async def get_node_health_proxy(node_id: int, db: Session = Depends(get_db), cur
         raise HTTPException(404, "Nodo no encontrado")
     try:
         async with httpx.AsyncClient(timeout=2.0) as client:
-            resp = await client.get(f"http://{node.ip_address}:{AGENT_PORT}/health", headers={"X-API-Key": AGENT_API_KEY})
+            resp = await client.get(f"http://{node.ip_address}:{AGENT_PORT}/health", headers={"X-API-Key": get_api_key()})
             return resp.json()
     except Exception as e:
         return {"status": "offline", "error": str(e)}

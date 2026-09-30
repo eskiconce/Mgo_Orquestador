@@ -6,7 +6,8 @@ import httpx
 import logging
 from datetime import datetime
 
-from core.config import AGENT_API_KEY, AGENT_PORT
+from core.config import AGENT_PORT
+from services.settings_service import get_api_key
 
 logger = logging.getLogger(__name__)
 
@@ -15,7 +16,7 @@ def send_command(job, action, req_session=None):
     try:
         url = f"http://{job.node.ip_address}:{AGENT_PORT}/jobs/create" if action == "start" else f"http://{job.node.ip_address}:{AGENT_PORT}/jobs/control"
         method = req_session if req_session else httpx
-        headers = {"X-API-Key": AGENT_API_KEY}
+        headers = {"X-API-Key": get_api_key()}
 
         if action == "start":
             payload = {"job_id": job.id, "channel_name": job.channel.channel_name, "command": job.command_compress, "autostart": True}

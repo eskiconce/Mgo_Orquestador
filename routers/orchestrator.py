@@ -5,7 +5,8 @@ import httpx, datetime
 import models
 from database import get_db
 from core.deps import get_current_user
-from core.config import AGENT_PORT, AGENT_API_KEY, KMS_API_URL
+from core.config import AGENT_PORT, KMS_API_URL
+from services.settings_service import get_api_key
 from services import builders
 from core.logging_service import logger
 
@@ -36,7 +37,7 @@ async def build_encoder_script(data: dict = Body(...), db: Session = Depends(get
         payload["subtitle_pid"] = int(channel.subtitle_pid)
     try:
         async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.post("http://172.16.223.10:8000/encoder/build", json=payload, headers={"X-API-Key": AGENT_API_KEY})
+            resp = await client.post("http://172.16.223.10:8000/encoder/build", json=payload, headers={"X-API-Key": get_api_key()})
             resp.raise_for_status()
             return resp.json()
     except httpx.HTTPStatusError as e:
@@ -89,7 +90,7 @@ async def rotate_channel_key(channel_id: int, db: Session = Depends(get_db), cur
             async with httpx.AsyncClient(timeout=10.0) as client:
                 await client.post(f"http://{job.node.ip_address}:{AGENT_PORT}/jobs/control",
                     params={"action": "restart", "program_name": prog},
-                    headers={"X-API-Key": AGENT_API_KEY})
+                    headers={"X-API-Key": get_api_key()})
             job.started_at = datetime.datetime.now()
             restarted.append(job.id)
         except Exception as e:
@@ -167,7 +168,7 @@ async def analyze_encoder_source(data: dict = Body(...), db: Session = Depends(g
     }
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            resp = await client.post(f"http://{node.ip_address}:{AGENT_PORT}/encoder/analyze", json=payload, headers={"X-API-Key": AGENT_API_KEY})
+            resp = await client.post(f"http://{node.ip_address}:{AGENT_PORT}/encoder/analyze", json=payload, headers={"X-API-Key": get_api_key()})
             if resp.status_code == 202:
                 analyze_tasks[task_id]["status"] = "running"
                 return {"status": "accepted", "task_id": task_id, "message": "Análisis iniciado en el encoder"}

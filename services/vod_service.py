@@ -4,9 +4,11 @@ from datetime import datetime, timedelta
 from pydantic import BaseModel
 import httpx
 import atexit
+import secrets
 import models
 from database import get_db
-from core.config import AGENT_API_KEY, CMS_REAL_WEBHOOK, ORCHESTRATOR_WEBHOOK_URL, VOD_API_PORT
+from core.config import CMS_REAL_WEBHOOK, ORCHESTRATOR_WEBHOOK_URL, VOD_API_PORT
+from services.settings_service import get_api_key
 from core.logging_service import logger
 from utils.helpers import sync_haproxy_vod_map, verify_cms_token, log_monitor_event
 from fastapi import Request
@@ -35,7 +37,7 @@ def receive_vod_webhook(
     db: Session = Depends(get_db)
 ):
     api_key = request.headers.get("X-API-Key") if request.headers else None
-    if api_key and api_key != AGENT_API_KEY:
+    if api_key and not secrets.compare_digest(api_key, get_api_key(db)):
         logger.warning(f"Webhook VOD con API key invalida desde {request.client.host}")
 
     process_id = payload.get("process_id")
@@ -181,7 +183,7 @@ def receive_remote_logs(
 #                 "kind": "recording",
 #                 "callback_url": ORCHESTRATOR_WEBHOOK_URL 
 #             }
-#             headers = {"X-API-Key": AGENT_API_KEY} 
+#             headers = {"X-API-Key": get_api_key()} 
 
 #             try:
 #                 _http.post(delete_url, json=payload, headers=headers, timeout=5)
@@ -244,7 +246,7 @@ def receive_remote_logs(
 #             "kind": "recording",
 #             "callback_url": ORCHESTRATOR_WEBHOOK_URL 
 #         }
-#         headers = {"X-API-Key": AGENT_API_KEY} 
+#         headers = {"X-API-Key": get_api_key()} 
 
 #         try:
 #             _http.post(delete_url, json=payload, headers=headers, timeout=5)
@@ -327,7 +329,7 @@ def cleanup_old_vods(db: Session = Depends(get_db)):
             "kind": "recording",
             "callback_url": ORCHESTRATOR_WEBHOOK_URL 
         }
-        headers = {"X-API-Key": AGENT_API_KEY} 
+        headers = {"X-API-Key": get_api_key()} 
 
         try:
             resp = _http.post(delete_url, json=payload, headers=headers, timeout=10)
@@ -496,7 +498,7 @@ def receive_tsmonitor_alert(payload: TSMonitorAlert, db: Session = Depends(get_d
 
             if encoder_job and rule_action in ["stop_encoder", "start_encoder", "restart_encoder"]:
                 agent_ip = encoder_job.node.ip_address
-                headers = {"X-API-Key": AGENT_API_KEY}
+                headers = {"X-API-Key": get_api_key()}
                 prog_name = f"channel_{channel.channel_name}_{encoder_job.id}"
 
                 try:

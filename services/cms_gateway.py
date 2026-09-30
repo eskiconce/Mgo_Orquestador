@@ -8,7 +8,8 @@ import atexit
 
 import models
 from database import get_db
-from core.config import AGENT_API_KEY, VOD_API_PORT, ORCHESTRATOR_WEBHOOK_URL
+from core.config import VOD_API_PORT, ORCHESTRATOR_WEBHOOK_URL
+from services.settings_service import get_api_key
 from core.logging_service import logger
 from utils.helpers import verify_cms_token
 
@@ -144,7 +145,7 @@ def proxy_cms_record(request_data: CMSRecordRequest, db: Session = Depends(get_d
     try:
         payload = request_data.dict(exclude_unset=True)
         payload["callback_url"] = ORCHESTRATOR_WEBHOOK_URL
-        headers = {"X-API-Key": AGENT_API_KEY}
+        headers = {"X-API-Key": get_api_key()}
         resp = _http.post(url_vod, json=payload, headers=headers, timeout=10)
         
         if resp.status_code not in [200, 201]:
@@ -200,7 +201,7 @@ def proxy_cms_vod(request_data: CMSVodRequest, db: Session = Depends(get_db), ap
     try:
         payload = request_data.dict(exclude_unset=True) if hasattr(request_data, 'dict') else request_data.model_dump(exclude_unset=True)
         payload["callback_url"] = ORCHESTRATOR_WEBHOOK_URL
-        headers = {"X-API-Key": AGENT_API_KEY}
+        headers = {"X-API-Key": get_api_key()}
         resp = _http.post(url_vod, json=payload, headers=headers, timeout=10)
         
         if resp.status_code not in [200, 201]:
@@ -228,7 +229,7 @@ def proxy_cms_delete(request_data: CMSDeleteRequest, db: Session = Depends(get_d
         raise HTTPException(status_code=503, detail="No hay nodos Origin disponibles en este momento.")
 
     payload = request_data.dict(exclude_unset=True) if hasattr(request_data, 'dict') else request_data.model_dump(exclude_unset=True)
-    headers = {"X-API-Key": AGENT_API_KEY}
+    headers = {"X-API-Key": get_api_key()}
     respuestas = []
 
     for node in packager_nodes:
