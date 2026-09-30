@@ -75,8 +75,11 @@ def update_settings_section(section: str, body: SectionUpdate,
     if unknown:
         raise HTTPException(400, f"Claves no permitidas: {sorted(unknown)}")
     values = {k: _normalize_value(k, v) for k, v in body.values.items()}
-    if section == "security" and "api_key" in values and len(values["api_key"]) < 16:
-        raise HTTPException(400, "API key mínimo 16 caracteres")
+    if section == "security" and "api_key" in values:
+        if not values["api_key"].isascii():
+            raise HTTPException(400, "API key solo puede contener caracteres ASCII")
+        if len(values["api_key"]) < 16:
+            raise HTTPException(400, "API key mínimo 16 caracteres")
     if section == "email":
         if "auth_mode" in values and values["auth_mode"] not in ("smtp", "graph"):
             raise HTTPException(400, "auth_mode debe ser 'smtp' o 'graph'")

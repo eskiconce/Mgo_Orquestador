@@ -112,3 +112,20 @@ class TestGenericSourceEndpoint:
         log = db_session.query(models.MonitorLog).filter(
             models.MonitorLog.event_type == "EXT_ALERT_MI-FUENTE").first()
         assert log is not None
+
+    def test_event_type_truncated_to_50_for_long_slug(self, client, db_session, canal):
+        # slug de 50 chars → event_type calculado de 60 chars; debe truncarse a 50
+        slug = "a" * 50
+        db_session.add(models.AlertSource(slug=slug, name="Fuente Larga",
+                                          token="t" * 32, enabled=True))
+        db_session.commit()
+        resp = client.post(f"/api/fuentes/{slug}/alertas",
+                           headers={"x-api-key": "t" * 32},
+                           json={"num_canal": "777", "fecha": "2026-09-29",
+                                 "hora": "10:00:00", "status": "freeze"})
+        assert resp.status_code == 200
+        log = db_session.query(models.MonitorLog).filter(
+            models.MonitorLog.event_type.startswith("EXT_ALERT_")).first()
+        assert log is not None
+        assert log.event_type == ("EXT_ALERT_" + slug.upper())[:50]
+        assert len(log.event_type) <= 50

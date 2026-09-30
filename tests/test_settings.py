@@ -174,6 +174,12 @@ class TestSettingsAPI:
         resp = admin_client.put("/api/settings/security", json={"values": {"api_key": "corto"}})
         assert resp.status_code == 400
 
+    def test_put_security_non_ascii_key_rejected(self, admin_client):
+        resp = admin_client.put("/api/settings/security",
+                                json={"values": {"api_key": "ñ" * 20}})
+        assert resp.status_code == 400
+        assert "ASCII" in resp.json()["error"]
+
     def test_put_email_invalid_auth_mode(self, admin_client):
         resp = admin_client.put("/api/settings/email", json={"values": {"auth_mode": "pigeon"}})
         assert resp.status_code == 400
@@ -186,6 +192,44 @@ class TestSettingsAPI:
         resp = admin_client.post("/api/settings/email/test")
         assert resp.status_code == 200
         assert resp.json()["status"] == "error"
+
+
+class TestVodWebhookCmsForward:
+
+    @staticmethod
+    def _fake_client(posts):
+        class FakeResp:
+            status_code = 204
+            text = ""
+
+        class FakeClient:
+            def post(self, url, **kwargs):
+                posts.append(url)
+                return FakeResp()
+
+        return FakeClient()
+
+    def test_forwards_to_bd_webhook(self, client, db_session, monkeypatch):
+        import services.vod_service as vs
+        save_section(db_session, "cms", {"webhook_url": "https://cms.bd/webhook"})
+        posts = []
+        monkeypatch.setattr(vs, "_http", self._fake_client(posts))
+        resp = client.post("/api/internal/vod-webhook",
+                           json={"process_id": "inexistente", "status": "success",
+                                 "event": "recording_finished"})
+        assert resp.status_code == 200
+        assert posts == ["https://cms.bd/webhook"]
+
+    def test_falls_back_to_config_when_row_missing(self, client, db_session, monkeypatch):
+        import services.vod_service as vs
+        from core.config import CMS_REAL_WEBHOOK
+        posts = []
+        monkeypatch.setattr(vs, "_http", self._fake_client(posts))
+        resp = client.post("/api/internal/vod-webhook",
+                           json={"process_id": "inexistente", "status": "success",
+                                 "event": "recording_finished"})
+        assert resp.status_code == 200
+        assert posts == [CMS_REAL_WEBHOOK]
 
 
 class TestAlertSourcesAPI:
@@ -314,3 +358,8 @@ class TestRulesSources:
         assert resp.status_code == 200
         assert "loadRuleSources" in resp.text
         assert 'value="tsmonitor"' not in resp.text
+
+    def test_rules_page_shows_error_when_sources_fail(self, admin_client):
+        resp = admin_client.get("/ui/alert-rules")
+        assert "No se pudieron cargar las fuentes de alertas" in resp.text
+        assert "insertAdjacentElement" in resp.text

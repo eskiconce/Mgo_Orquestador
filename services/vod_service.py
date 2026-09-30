@@ -8,7 +8,7 @@ import secrets
 import models
 from database import get_db
 from core.config import CMS_REAL_WEBHOOK, ORCHESTRATOR_WEBHOOK_URL, VOD_API_PORT
-from services.settings_service import get_api_key
+from services.settings_service import get_api_key, get_setting
 from services.alert_intake import handle_tsmonitor_style_alert, ChannelNotFound
 from core.logging_service import logger
 from utils.helpers import sync_haproxy_vod_map, verify_cms_token, log_monitor_event
@@ -82,8 +82,9 @@ def receive_vod_webhook(
                 
     # Reenviar webhook final al CMS
     try:
-        logger.info(f"Reenviando webhook final al CMS: {CMS_REAL_WEBHOOK}")
-        respuesta_cms = _http.post(CMS_REAL_WEBHOOK, json=payload, timeout=5)
+        cms_url = get_setting(db, "cms", "webhook_url", CMS_REAL_WEBHOOK) or CMS_REAL_WEBHOOK
+        logger.info(f"Reenviando webhook final al CMS: {cms_url}")
+        respuesta_cms = _http.post(cms_url, json=payload, timeout=5)
         if respuesta_cms.status_code in [200, 201, 204]:
             logger.info(f"✅ CMS confirmó recepción correctamente (Status {respuesta_cms.status_code})")
         else:
@@ -487,7 +488,7 @@ def receive_source_alert(slug: str, payload: SourceAlertPayload,
     try:
         return handle_tsmonitor_style_alert(
             db, source=slug, reporter=src.name,
-            event_type=f"EXT_ALERT_{slug.upper()}",
+            event_type=("EXT_ALERT_" + slug.upper())[:50],
             num_canal=payload.num_canal, fecha=payload.fecha,
             hora=payload.hora, status=payload.status,
         )
