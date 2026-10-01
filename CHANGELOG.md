@@ -10,7 +10,7 @@
 - Fix: timestamp consola/BD idéntico — `log_monitor_event` trunca microsegundos (el `DATETIME(0)` de MySQL redondeaba +1s respecto a la consola)
 - Fix: `stop_job` honesto — HTTP != 200 o fallo de red del agente → HTTP 502 y el job **NO** se marca `stopped` (eliminado el `except: pass` silencioso)
 - Modificado: `/ui/monitor-logs` — dropdown con los 29 tipos de evento reales del sistema + badges consistentes
-- Fase A del cambio OpenSpec `zombie-crashloop-sync` (fase B en Api_agent-linux pendiente)
+- Cambio OpenSpec `zombie-crashloop-sync` **completo**: Fase A (orquestador, v2.20.0) + Fase B (`Api_agent-linux` v1.5.0 — StartLimit anti crash-loop 3/60s, stop verificado con normalización `reset-failed`, mapeo `activating(auto-restart)→BACKOFF` / `failed→FATAL` en `/jobs/status`, fix parseo del marcador `●` de `list-units` y syntax error que impedía ejecutar v1.4.0)
 - Issue: https://github.com/eskiconce/Mgo_Orquestador/issues/12
 
 ## v2.19.0 (29 Sep 2026) — Issue #10: Parámetros Generales + fuentes de alertas

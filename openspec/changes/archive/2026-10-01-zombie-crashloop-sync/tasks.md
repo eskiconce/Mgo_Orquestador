@@ -17,13 +17,13 @@
 
 ## Fase B — Api_agent-linux (mañana)
 
-- [ ] 13. B1 — `StartLimitIntervalSec=60` + `StartLimitBurst=3` en `/jobs/create`
-- [ ] 14. B2 — stop verificado en `/jobs/control`
-- [ ] 15. B3 — mapeo `failed→FATAL`, `activating(auto-restart)→BACKOFF` en `/jobs/status`
-- [ ] 16. B4 — docs + CHANGELOG Api_agent-linux
-- [ ] 17. B5 — deploy agente + verificación
+- [x] 13. B1 — `StartLimitIntervalSec=60` + `StartLimitBurst=3` en `/jobs/create`
+- [x] 14. B2 — stop verificado en `/jobs/control`
+- [x] 15. B3 — mapeo `failed→FATAL`, `activating(auto-restart)→BACKOFF` en `/jobs/status`
+- [x] 16. B4 — docs + CHANGELOG Api_agent-linux
+- [x] 17. B5 — deploy agente + verificación
 
 ## Cierre
 
-- [ ] 18. QA — verificar completitud de specs
-- [ ] 19. `openspec archive zombie-crashloop-sync` + cierre issue #12 (tras Fase B)
+- [x] 18. QA — verificar completitud de specs
+- [x] 19. `openspec archive zombie-crashloop-sync` + cierre issue #12 (tras Fase B)

@@ -17,6 +17,6 @@ Issue #12: el crash-loop de systemd en encoder_03 (units `channel_{Click_Tv_181,
 
 - Affected specs: monitoring (zombie-stability, event-integrity), cms (rate-limit), jobs (stop-honesty) — nuevos en este change.
 - Affected code: `monitor/__init__.py`, `monitor/alerts.py`, `monitor/recovery.py`, `monitor/health.py`, `utils/helpers.py`, `routers/processes.py`, `routers/internal.py`, `core/config.py`, `templates/monitor_logs.html`.
-- Fase B (pendiente hasta mañana): `Api_agent-linux` — B1 `StartLimitIntervalSec/Burst` en `/jobs/create`, B2 stop verificado, B3 mapeo `failed→FATAL` / `activating→BACKOFF`, B4 docs, B5 deploy.
+- **Fase B** `Api_agent-linux` v1.5.0 (spec `agent-systemd`): B1 `StartLimitIntervalSec=60`/`StartLimitBurst=3` en `/jobs/create`, B2 stop verificado en `/jobs/control` (502 si el servicio sigue activo), B3 mapeo `activating(auto-restart)→BACKOFF` / `failed→FATAL` en `/jobs/status`, B4 docs+CHANGELOG, B5 deploy encoder_02+encoder_03. Incluye fix de syntax error en `main.py` (v1.4.0 nunca llegó a ejecutarse: servicio no reiniciado desde 2026-09-14/2026-09-07).
 - Operacional: los 5 canales afectados (jobs 181/197/183/221/262) quedan detenidos permanentemente (`stop + disable` ya aplicado en encoder_03 — A0).
 - Issue: https://github.com/eskiconce/Mgo_Orquestador/issues/12
