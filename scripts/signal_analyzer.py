@@ -9,6 +9,22 @@ Detecta automaticamente el SO y usa:
   - Linux: libx264 (software, preset veryfast)
 
 Uso: python3 signal_analyzer.py <source_url> <local_ip> <dest_multicast> [opciones]
+
+CHANGELOG (mejoras sobre la version original):
+  - Se elimina el uso de eval() para parsear r_frame_rate (parser de fraccion seguro).
+  - Los valores insertados en el script generado (service_name, callback URL, etc.)
+    ahora se serializan con json.dumps() para evitar romper la sintaxis del
+    script generado si contienen comillas u otros caracteres especiales.
+  - stream_id de audio ahora usa un contador propio en vez de asumir index-1.
+  - Deteccion real de streams de subtitulos: si --burn-subtitles se pide pero
+    la fuente no tiene subtitulos, se desactiva con warning en vez de fallar
+    en el encoding.
+  - Manejo de señales (SIGINT/SIGTERM) y timeout durante la fase de captura
+    de analisis, para no dejar procesos ffmpeg huerfanos.
+  - Nuevos flags opcionales (no cambian el comportamiento por defecto):
+      --bitrate-p4=N          bitrate del perfil bajo (default: 2500, igual que antes)
+      --videotoolbox-cbr      fuerza -constant_bit_rate 1 en VideoToolbox (FFmpeg >=6.1)
+      --no-annexb-bsf         omite -bsf:v h264_mp4toannexb en la salida
 """
 
 import subprocess
@@ -30,7 +46,6 @@ from pathlib import Path
 
 PLATFORM = platform.system()  # "Darwin" o "Linux"
 
-# Buscar ffmpeg en el PATH o usar ruta por defecto
 FFMPEG = shutil.which("ffmpeg") or ("/opt/homebrew/bin/ffmpeg" if PLATFORM == "Darwin" else "/usr/bin/ffmpeg")
 FFPROBE = shutil.which("ffprobe") or ("/opt/homebrew/bin/ffprobe" if PLATFORM == "Darwin" else "/usr/bin/ffprobe")
 
@@ -46,6 +61,18 @@ def build_url(base_url, local_ip, extra_params=""):
     if extra_params:
         url += f"&{extra_params}"
     return url
+
+
+def parse_fraction(value, default=0.0):
+    """Parsea 'N/D' de forma segura, sin eval()."""
+    try:
+        if "/" in value:
+            num, den = value.split("/")
+            num, den = float(num), float(den)
+            return num / den if den else default
+        return float(value)
+    except Exception:
+        return default
 
 
 class C:
@@ -66,13 +93,17 @@ def log(msg, level="INFO"):
     print(f"{color}[{ts}][{level}] {msg}{C.END}")
 
 
-def get_encoder_config():
-    """Retorna configuracion del encoder segun el plataforma."""
+def get_encoder_config(videotoolbox_cbr=False):
+    """Retorna configuracion del encoder segun la plataforma."""
     if PLATFORM == "Darwin":
+        extra_args = ["-allow_sw", "0", "-realtime", "1"]
+        if videotoolbox_cbr:
+            # Requiere FFmpeg >= 6.1. Si el binario es mas viejo, quitar este flag.
+            extra_args += ["-constant_bit_rate", "1"]
         return {
             "name": "h264_videotoolbox",
             "type": "hardware",
-            "extra_args": ["-allow_sw", "0", "-realtime", "1"],
+            "extra_args": extra_args,
             "preset_arg": [],
             "profile_arg": ["-profile:v", "main"],
         }
@@ -90,14 +121,15 @@ def get_encoder_config():
 # FASE 1: ANALISIS DE LA SENAL
 # ============================================================
 
-def analyze_source(source_url, local_ip, duration=ANALYSIS_DURATION, gop_p1=60, audio_mapping="0:a:0"):
+def analyze_source(source_url, local_ip, duration=ANALYSIS_DURATION, gop_p1=60, audio_mapping="0:a:0",
+                    bitrate_p4=2500, bitrate_p1=None, fps_target=None):
     """Analiza la senal de origen y retorna metricas completas."""
-    
+
     log(f"Plataforma detectada: {PLATFORM} ({'VideoToolbox' if PLATFORM == 'Darwin' else 'libx264'})", "PHASE")
     log(f"FFmpeg: {FFMPEG}", "INFO")
     log(f"Iniciando analisis de {duration}s sobre: {source_url}", "PHASE")
     log("=" * 60, "PHASE")
-    
+
     analysis = {
         "timestamp": datetime.now().isoformat(),
         "platform": PLATFORM,
@@ -107,52 +139,52 @@ def analyze_source(source_url, local_ip, duration=ANALYSIS_DURATION, gop_p1=60, 
         "analysis_duration": duration,
         "video": {},
         "audio_streams": [],
+        "subtitle_streams": [],
         "quality": {},
         "warnings": [],
         "recommendations": []
     }
-    
-    # --- Paso 1: ffprobe rapido para metadata ---
+
     log("Paso 1/4: Obteniendo metadata del stream...", "INFO")
     probe_data = ffprobe_streams(source_url, local_ip)
     if not probe_data:
         log("No se pudo obtener metadata del stream", "ERR")
         return None
-    
+
     analysis["video"] = probe_data["video"]
     analysis["audio_streams"] = probe_data["audio"]
-    
-    # --- Paso 2: Captura extendida para analisis de calidad ---
+    analysis["subtitle_streams"] = probe_data["subtitles"]
+
     log(f"Paso 2/4: Capturando {duration}s para analisis de calidad...", "INFO")
     quality_data = capture_and_analyze(source_url, local_ip, duration)
     analysis["quality"] = quality_data
-    
-    # --- Paso 3: Deteccion de interlacing ---
+
     log("Paso 3/4: Detectando interlacing...", "INFO")
     interlace_data = detect_interlacing(source_url, local_ip)
     analysis["video"]["interlaced"] = interlace_data["interlaced"]
     analysis["video"]["interlace_type"] = interlace_data["type"]
-    
-    # --- Paso 4: Generar recomendaciones ---
+
     log("Paso 4/4: Generando recomendaciones...", "INFO")
-    analysis["recommendations"] = generate_recommendations(analysis, gop_p1=gop_p1, audio_mapping=audio_mapping)
+    analysis["recommendations"] = generate_recommendations(
+        analysis, gop_p1=gop_p1, audio_mapping=audio_mapping, bitrate_p4=bitrate_p4,
+        bitrate_p1=bitrate_p1, fps_target=fps_target
+    )
     analysis["warnings"] = generate_warnings(analysis)
-    
-    # Guardar analisis
+
     with open(ANALYSIS_OUTPUT, 'w') as f:
         json.dump(analysis, f, indent=2, ensure_ascii=False)
-    
+
     log(f"Analisis guardado en: {ANALYSIS_OUTPUT}", "OK")
     print_analysis_summary(analysis)
-    
+
     return analysis
 
 
 def ffprobe_streams(source_url, local_ip):
     """Obtiene metadata de todos los streams via ffprobe."""
-    
+
     full_url = build_url(source_url, local_ip)
-    
+
     cmd = [
         FFPROBE,
         "-hide_banner",
@@ -164,27 +196,33 @@ def ffprobe_streams(source_url, local_ip):
         "-probesize", "10000000",
         full_url
     ]
-    
+
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, timeout=30)
         if result.returncode != 0:
             log(f"ffprobe error: {result.stderr[:200]}", "ERR")
             return None
-        
+
         data = json.loads(result.stdout)
-        
+
         video_info = {}
         audio_streams = []
-        
+        subtitle_streams = []
+        audio_counter = 0
+        subtitle_counter = 0
+
         for stream in data.get("streams", []):
-            if stream.get("codec_type") == "video":
+            codec_type = stream.get("codec_type")
+
+            if codec_type == "video":
+                fps_raw = stream.get("r_frame_rate", "0/1")
                 video_info = {
                     "codec": stream.get("codec_name", "unknown"),
                     "profile": stream.get("profile", "unknown"),
                     "width": stream.get("width", 0),
                     "height": stream.get("height", 0),
-                    "fps_raw": stream.get("r_frame_rate", "0/1"),
-                    "fps_eval": eval(stream.get("r_frame_rate", "0/1")) if "/" in stream.get("r_frame_rate", "0/1") else 0,
+                    "fps_raw": fps_raw,
+                    "fps_eval": parse_fraction(fps_raw, default=0),
                     "pix_fmt": stream.get("pix_fmt", "unknown"),
                     "color_range": stream.get("color_range", "unknown"),
                     "color_space": stream.get("color_space", "unknown"),
@@ -197,11 +235,11 @@ def ffprobe_streams(source_url, local_ip):
                     "refs": stream.get("refs", 0),
                     "has_b_frames": stream.get("has_b_frames", 0),
                 }
-            
-            elif stream.get("codec_type") == "audio":
+
+            elif codec_type == "audio":
                 audio_streams.append({
                     "index": stream.get("index", 0),
-                    "stream_id": stream.get("index", 0) - 1,
+                    "stream_id": audio_counter,
                     "codec": stream.get("codec_name", "unknown"),
                     "profile": stream.get("profile", "unknown"),
                     "sample_rate": int(stream.get("sample_rate", 0)),
@@ -211,9 +249,19 @@ def ffprobe_streams(source_url, local_ip):
                     "language": stream.get("tags", {}).get("language", "und"),
                     "start_time": float(stream.get("start_time", 0)),
                 })
-        
-        return {"video": video_info, "audio": audio_streams}
-        
+                audio_counter += 1
+
+            elif codec_type == "subtitle":
+                subtitle_streams.append({
+                    "index": stream.get("index", 0),
+                    "stream_id": subtitle_counter,
+                    "codec": stream.get("codec_name", "unknown"),
+                    "language": stream.get("tags", {}).get("language", "und"),
+                })
+                subtitle_counter += 1
+
+        return {"video": video_info, "audio": audio_streams, "subtitles": subtitle_streams}
+
     except subprocess.TimeoutExpired:
         log("ffprobe timeout - el stream no responde", "ERR")
         return None
@@ -224,9 +272,9 @@ def ffprobe_streams(source_url, local_ip):
 
 def capture_and_analyze(source_url, local_ip, duration):
     """Captura durante el analisis y recopila metricas de calidad."""
-    
+
     full_url = build_url(source_url, local_ip)
-    
+
     cmd = [
         FFMPEG,
         "-hide_banner",
@@ -240,7 +288,7 @@ def capture_and_analyze(source_url, local_ip, duration):
         "-f", "null",
         "-"
     ]
-    
+
     quality = {
         "frames_total": 0,
         "frames_video": 0,
@@ -253,26 +301,35 @@ def capture_and_analyze(source_url, local_ip, duration):
         "speed_factor": 0,
         "avg_fps": 0,
         "avg_bitrate_kbps": 0,
-        "timestamps": [],
     }
-    
+
+    proc = None
+
+    def handle_capture_signal(signum, frame):
+        log("Señal de interrupcion recibida durante el analisis, deteniendo ffmpeg...", "WARN")
+        if proc is not None:
+            proc.terminate()
+
+    prev_sigint = signal.signal(signal.SIGINT, handle_capture_signal)
+    prev_sigterm = signal.signal(signal.SIGTERM, handle_capture_signal)
+
     try:
         log(f"Captura iniciada - esperando {duration}s de stream...", "INFO")
         log("(Si no ves progreso, verifica que el stream UDP este activo)", "WARN")
-        
+
         proc = subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             universal_newlines=True
         )
-        
+
         discontinuity_count = 0
         decode_errors = 0
         timestamp_errors = 0
         start_time = time.time()
         last_progress = 0
-        
+
         for line in proc.stdout:
             elapsed = time.time() - start_time
             progress_pct = min(100, int(elapsed / duration * 100))
@@ -280,7 +337,7 @@ def capture_and_analyze(source_url, local_ip, duration):
                 remaining = max(0, duration - elapsed)
                 log(f"Progreso: {progress_pct}% ({int(elapsed)}s / {duration}s) - quedan ~{int(remaining)}s", "INFO")
                 last_progress = progress_pct
-            
+
             if "timestamp discontinuity" in line:
                 discontinuity_count += 1
             if "mmco: unref short failure" in line:
@@ -291,7 +348,7 @@ def capture_and_analyze(source_url, local_ip, duration):
                 timestamp_errors += 1
             if "Non-monotonic" in line:
                 timestamp_errors += 1
-            
+
             frame_match = re.search(r'frame=\s*(\d+)', line)
             if frame_match:
                 quality["frames_total"] = int(frame_match.group(1))
@@ -313,27 +370,39 @@ def capture_and_analyze(source_url, local_ip, duration):
             bitrate_match = re.search(r'bitrate=\s*([\d.]+)kbits/s', line)
             if bitrate_match:
                 quality["avg_bitrate_kbps"] = float(bitrate_match.group(1))
-        
-        proc.wait()
-        
+
+        # Da margen (10s) por si el proceso tarda en cerrar tras -t; si no,
+        # se mata para no dejarlo huerfano.
+        try:
+            proc.wait(timeout=10)
+        except subprocess.TimeoutExpired:
+            log("ffmpeg no cerro a tiempo tras -t, forzando kill()", "WARN")
+            proc.kill()
+            proc.wait(timeout=5)
+
         quality["discontinuity_count"] = discontinuity_count
         quality["decode_errors"] = decode_errors
         quality["timestamp_errors"] = timestamp_errors
-        
+
         total_time = int(time.time() - start_time)
         log(f"Captura completada en {total_time}s - {quality['frames_total']} frames analizados", "OK")
-        
+
     except Exception as e:
         log(f"Error durante captura: {e}", "ERR")
-    
+    finally:
+        signal.signal(signal.SIGINT, prev_sigint)
+        signal.signal(signal.SIGTERM, prev_sigterm)
+        if proc is not None and proc.poll() is None:
+            proc.kill()
+
     return quality
 
 
 def detect_interlacing(source_url, local_ip, sample_duration=10):
     """Detecta si el source es interlaced analizando una muestra corta."""
-    
+
     full_url = build_url(source_url, local_ip)
-    
+
     cmd = [
         FFMPEG,
         "-hide_banner",
@@ -348,9 +417,9 @@ def detect_interlacing(source_url, local_ip, sample_duration=10):
         "-f", "null",
         "-"
     ]
-    
+
     result = {"interlaced": False, "type": "progressive", "tff": 0, "bff": 0, "progressive": 0, "undetermined": 0}
-    
+
     try:
         proc = subprocess.Popen(
             cmd,
@@ -358,7 +427,7 @@ def detect_interlacing(source_url, local_ip, sample_duration=10):
             stderr=subprocess.STDOUT,
             universal_newlines=True
         )
-        
+
         for line in proc.stdout:
             idet_match = re.search(
                 r'Single frame detection:.*?TFF:\s*(\d+).*?BFF:\s*(\d+).*?Progressive:\s*(\d+).*?Undetermined:\s*(\d+)',
@@ -369,7 +438,7 @@ def detect_interlacing(source_url, local_ip, sample_duration=10):
                 result["bff"] = int(idet_match.group(2))
                 result["progressive"] = int(idet_match.group(3))
                 result["undetermined"] = int(idet_match.group(4))
-                
+
                 total = result["tff"] + result["bff"] + result["progressive"] + result["undetermined"]
                 if total > 0:
                     interlaced_pct = (result["tff"] + result["bff"]) / total * 100
@@ -379,23 +448,30 @@ def detect_interlacing(source_url, local_ip, sample_duration=10):
                             result["type"] = "tff"
                         else:
                             result["type"] = "bff"
-        
-        proc.wait()
-        
+
+        proc.wait(timeout=sample_duration + 10)
+
     except Exception as e:
         log(f"Error en deteccion de interlacing: {e}", "WARN")
-    
+
     return result
 
 
-def generate_recommendations(analysis, gop_p1=60, audio_mapping="0:a:0"):
-    """Genera recomendaciones de encoding basadas en el analisis."""
-    
+def generate_recommendations(analysis, gop_p1=60, audio_mapping="0:a:0", bitrate_p4=2500,
+                              bitrate_p1=None, fps_target=None):
+    """Genera recomendaciones de encoding.
+
+    gop_p1, audio_mapping, bitrate_p4, bitrate_p1 y fps_target son parametros de
+    configuracion del canal (vienen de la BD). Cuando bitrate_p1 o fps_target
+    no se especifican (p.ej. corriendo --analyze-only sin canal asociado a un
+    registro de BD todavia), se usa un valor sugerido en base al analisis de
+    la fuente, marcado explicitamente como "suggested" para no confundirlo
+    con un valor de configuracion real.
+    """
+
     recs = []
     video = analysis["video"]
-    quality = analysis["quality"]
-    
-    # Deinterlacer
+
     if video.get("interlaced"):
         recs.append({
             "category": "deinterlace",
@@ -408,84 +484,68 @@ def generate_recommendations(analysis, gop_p1=60, audio_mapping="0:a:0"):
             "value": "none",
             "reason": "Source ya es progressive"
         })
-    
-    # GOP (from BD, not from analysis)
-    fps = video.get("fps_eval", 29.97)
-    recs.append({"category": "gop", "value": gop_p1, "reason": f"Source {fps}fps, GOP={gop_p1} (desde BD)"})
-    
-    # Bitrate y resolucion
+
+    source_fps = video.get("fps_eval", 29.97)
+    recs.append({"category": "gop", "value": gop_p1, "reason": f"GOP={gop_p1} (desde BD, segun tamaño de segmento del packager)"})
+
     width = video.get("width", 0)
     height = video.get("height", 0)
-    
+
     if width >= 1920:
-        recs.append({"category": "bitrate_p1", "value": 4500, "reason": "1080p: 4500k recomendado"})
-        recs.append({"category": "resolution_p1", "value": "1920x1080", "reason": "Escalar a 1080p"})
-        recs.append({"category": "resolution_p4", "value": "852x480", "reason": "480p como perfil bajo"})
+        suggested_bitrate_p1 = 4500
+        resolution_p1 = "1920x1080"
+        resolution_p4 = "852x480"
+        suggested_bitrate_p4 = 1200
     elif width >= 1280:
-        recs.append({"category": "bitrate_p1", "value": 4000, "reason": "720p: 4000k recomendado"})
-        recs.append({"category": "resolution_p1", "value": "1280x720", "reason": "Mantener 720p nativo"})
-        recs.append({"category": "resolution_p4", "value": "852x480", "reason": "480p como perfil bajo"})
+        suggested_bitrate_p1 = 4000
+        resolution_p1 = "1280x720"
+        resolution_p4 = "852x480"
+        suggested_bitrate_p4 = 1200
     else:
-        recs.append({"category": "bitrate_p1", "value": 2500, "reason": f"{width}x{height}: bitrate moderado"})
-        recs.append({"category": "resolution_p1", "value": f"{width}x{height}", "reason": "Mantener resolucion nativa"})
-        recs.append({"category": "resolution_p4", "value": "640x360", "reason": "360p como perfil bajo"})
-    
-    # Audio mapping (from BD, not auto-selected)
+        suggested_bitrate_p1 = 2500
+        resolution_p1 = f"{width}x{height}"
+        resolution_p4 = "640x360"
+        suggested_bitrate_p4 = 700
+
+    recs.append({"category": "resolution_p1", "value": resolution_p1, "reason": "Resolucion del perfil principal segun origen"})
+    recs.append({"category": "resolution_p4", "value": resolution_p4, "reason": "Resolucion del perfil bajo segun origen"})
+    recs.append({"category": "bitrate_p4_suggested", "value": suggested_bitrate_p4, "reason": "Sugerencia si no viene fijo por BD (SD normalmente es fijo en 2500k)"})
+
+    # bitrate_p1 (HD): siempre deberia venir de la BD (4500/5000/6000k segun
+    # origen). Si no se especifica, se usa el sugerido por resolucion como
+    # respaldo, dejando claro que es una sugerencia, no un valor de canal.
+    if bitrate_p1 is not None:
+        recs.append({"category": "bitrate_p1", "value": bitrate_p1, "reason": f"Bitrate HD desde BD: {bitrate_p1}k"})
+    else:
+        recs.append({"category": "bitrate_p1", "value": suggested_bitrate_p1, "reason": f"Sin bitrate de BD - sugerido por resolucion ({resolution_p1})"})
+
     recs.append({"category": "audio_mapping", "value": audio_mapping, "reason": f"Mapeo de audio desde BD: {audio_mapping}"})
-    
-    # FPS
-    if fps >= 59.9:
-        recs.append({"category": "output_fps", "value": "30000/1001", "reason": f"Source {fps}fps, output 29.97fps (2:1 decimation)"})
+
+    # fps de salida: viene de la BD (30 o 60 segun origen y config del canal).
+    # Si no se especifica, se mantiene 29.97 (30000/1001) como fallback historico.
+    fps_map = {30: "30000/1001", 60: "60000/1001"}
+    if fps_target is not None:
+        output_fps = fps_map.get(int(fps_target), "30000/1001")
+        recs.append({"category": "output_fps", "value": output_fps, "reason": f"FPS de salida desde BD: {fps_target}fps (source {source_fps}fps)"})
     else:
-        recs.append({"category": "output_fps", "value": "30000/1001", "reason": f"Source {fps}fps, mantener 29.97fps"})
-    
-    # Bufsize
-    bitrate_p1 = next((r["value"] for r in recs if r["category"] == "bitrate_p1"), 4000)
-    recs.append({"category": "bufsize_p1", "value": bitrate_p1 * 2, "reason": f"bufsize = 2x bitrate ({bitrate_p1 * 2}k)"})
-    recs.append({"category": "bufsize_p4", "value": 2500 * 2, "reason": "bufsize = 2x bitrate (5000k)"})
-    
-    # Muxrate
+        recs.append({"category": "output_fps", "value": "30000/1001", "reason": f"Sin fps de BD - fallback 29.97fps (source {source_fps}fps)"})
+
+    bitrate_p1_final = next(r["value"] for r in recs if r["category"] == "bitrate_p1")
+    recs.append({"category": "bufsize_p1", "value": bitrate_p1_final * 2, "reason": f"bufsize = 2x bitrate ({bitrate_p1_final * 2}k)"})
+    recs.append({"category": "bitrate_p4", "value": bitrate_p4, "reason": "bitrate_p4 configurado (SD, normalmente fijo en 2500k por BD)"})
+    recs.append({"category": "bufsize_p4", "value": bitrate_p4 * 2, "reason": f"bufsize = 2x bitrate ({bitrate_p4 * 2}k)"})
+
     recs.append({"category": "muxrate", "value": "none", "reason": "No usar muxrate fijo (causa dts<pcr)"})
-    
+
     return recs
-
-
-def select_best_audio(audio_streams):
-    """Selecciona el mejor stream de audio priorizando español."""
-    if not audio_streams:
-        return None
-    
-    def lang_score(lang):
-        lang = lang.lower()
-        if lang in ("spa", "es", "spanish", "castellano"):
-            return 1000
-        elif lang in ("eng", "en", "english"):
-            return 100
-        else:
-            return 0
-    
-    codec_priority = {"eac3": 4, "ac3": 3, "aac": 2, "mp2": 1, "mp3": 1}
-    
-    scored = []
-    for stream in audio_streams:
-        codec_score = codec_priority.get(stream["codec"], 0)
-        channel_score = stream["channels"]
-        bitrate_score = stream["bit_rate"] / 100000
-        language = lang_score(stream.get("language", "und"))
-        
-        total_score = language + codec_score * 100 + channel_score * 10 + bitrate_score
-        scored.append((total_score, stream))
-    
-    scored.sort(key=lambda x: x[0], reverse=True)
-    return scored[0][1] if scored else None
 
 
 def generate_warnings(analysis):
     """Genera warnings basados en problemas detectados."""
-    
+
     warnings = []
     quality = analysis["quality"]
-    
+
     if quality.get("dup_count", 0) > 10:
         warnings.append({"level": "HIGH", "message": f"{quality['dup_count']} frames duplicados - posible perdida de paquetes UDP"})
     if quality.get("drop_count", 0) > 5:
@@ -498,25 +558,25 @@ def generate_warnings(analysis):
         warnings.append({"level": "MEDIUM", "message": f"{quality['decode_errors']} errores de decode"})
     if quality.get("speed_factor", 0) < 0.8:
         warnings.append({"level": "HIGH", "message": f"Speed factor {quality['speed_factor']}x - no mantiene tiempo real"})
-    
+
     return warnings
 
 
 def print_analysis_summary(analysis):
     """Imprime un resumen del analisis."""
-    
+
     print()
     print(f"{C.BOLD}{'=' * 60}{C.END}")
     print(f"{C.BOLD}  RESUMEN DEL ANALISIS{C.END}")
     print(f"{C.BOLD}{'=' * 60}{C.END}")
-    
+
     video = analysis["video"]
     quality = analysis["quality"]
-    
+
     print(f"\n{C.CYAN}PLATAFORMA:{C.END}")
     print(f"  SO:         {analysis.get('platform', '?')}")
     print(f"  Encoder:    {analysis.get('encoder', '?')}")
-    
+
     print(f"\n{C.CYAN}VIDEO:{C.END}")
     print(f"  Codec:      {video.get('codec', '?')} ({video.get('profile', '?')})")
     print(f"  Resolucion: {video.get('width', '?')}x{video.get('height', '?')}")
@@ -525,12 +585,19 @@ def print_analysis_summary(analysis):
     print(f"  Color:      {video.get('color_range', '?')} / {video.get('color_space', '?')}")
     print(f"  Interlaced: {video.get('interlaced', '?')} ({video.get('interlace_type', 'n/a')})")
     print(f"  Bitrate:    {video.get('bit_rate', 0) / 1000:.0f} kbps")
-    
+
     print(f"\n{C.CYAN}AUDIO:{C.END}")
     for audio in analysis.get("audio_streams", []):
         lang = audio.get("language", "und")
         print(f"  Stream #{audio['stream_id']}: {audio['codec']} {audio['channels']}ch {audio['sample_rate']}Hz {audio['bit_rate']/1000:.0f}kbps [{lang}]")
-    
+
+    if analysis.get("subtitle_streams"):
+        print(f"\n{C.CYAN}SUBTITULOS:{C.END}")
+        for sub in analysis["subtitle_streams"]:
+            print(f"  Stream #{sub['stream_id']}: {sub['codec']} [{sub.get('language', 'und')}]")
+    else:
+        print(f"\n{C.CYAN}SUBTITULOS:{C.END} ninguno detectado")
+
     print(f"\n{C.CYAN}CALIDAD:{C.END}")
     print(f"  Frames capturados:    {quality.get('frames_total', 0)}")
     print(f"  FPS promedio:         {quality.get('avg_fps', 0)}")
@@ -541,17 +608,17 @@ def print_analysis_summary(analysis):
     print(f"  Errores de timestamp: {quality.get('timestamp_errors', 0)}")
     print(f"  Errores de decode:    {quality.get('decode_errors', 0)}")
     print(f"  Speed factor:         {quality.get('speed_factor', 0)}x")
-    
+
     if analysis.get("warnings"):
         print(f"\n{C.RED}WARNINGS:{C.END}")
         for w in analysis["warnings"]:
             icon = "!!" if w["level"] == "HIGH" else "! "
             print(f"  {C.RED}[{icon}]{C.END} {w['message']}")
-    
+
     print(f"\n{C.GREEN}RECOMENDACIONES:{C.END}")
     for r in analysis.get("recommendations", []):
         print(f"  [{r['category']}] {r['value']} - {r['reason']}")
-    
+
     print()
 
 
@@ -559,91 +626,74 @@ def print_analysis_summary(analysis):
 # FASE 2: GENERADOR DE SCRIPT DE ENCODING
 # ============================================================
 
-def generate_encoder_script(analysis, source_url, local_ip, dest_p1, dest_p4, output_path=SCRIPT_OUTPUT, burn_subtitles=False, service_id=None, service_name=None, gop_p1=60, audio_mapping="0:a:0", restart_callback_url=None):
+def generate_encoder_script(analysis, source_url, local_ip, dest_p1, dest_p4, output_path=SCRIPT_OUTPUT,
+                             burn_subtitles=False, service_id=None, service_name=None, gop_p1=60,
+                             audio_mapping="0:a:0", restart_callback_url=None,
+                             videotoolbox_cbr=False, use_annexb_bsf=True):
     """Genera el script de encoding basado en el analisis y la plataforma."""
-    
+
     recs = {r["category"]: r["value"] for r in analysis.get("recommendations", [])}
     video = analysis["video"]
-    audio_streams = analysis.get("audio_streams", [])
     platform_name = analysis.get("platform", PLATFORM)
-    encoder_name = analysis.get("encoder", "libx264")
-    
-    # Parametros del video
+
     fps = video.get("fps_eval", 29.97)
     width = video.get("width", 1280)
     height = video.get("height", 720)
     interlaced = video.get("interlaced", False)
     interlace_type = video.get("interlace_type", "progressive")
-    
-    # Parametros de output
+
     bitrate_p1 = recs.get("bitrate_p1", 4000)
     resolution_p1 = recs.get("resolution_p1", "1280x720")
     resolution_p4 = recs.get("resolution_p4", "852x480")
-    gop = gop_p1  # Usar GOP de la BD para ambos perfiles
+    gop = gop_p1
     output_fps = recs.get("output_fps", "30000/1001")
     bufsize_p1 = recs.get("bufsize_p1", 8000)
-    bufsize_p4 = recs.get("bufsize_p4", 5000)
+    bitrate_p4 = recs.get("bitrate_p4", 2500)
+    bufsize_p4 = recs.get("bufsize_p4", bitrate_p4 * 2)
     audio_mapping_val = recs.get("audio_mapping", "0:a:0")
     audio_downmix = recs.get("audio_downmix", False)
-    
-    # Metadatos MPEG-TS (formato correcto)
+
+    # Validar subtitulos reales antes de armar el filter_complex
+    has_subtitles = bool(analysis.get("subtitle_streams"))
+    if burn_subtitles and not has_subtitles:
+        log("--burn-subtitles solicitado pero la fuente no tiene stream de subtitulos. Se desactiva.", "WARN")
+        burn_subtitles = False
+    subtitle_stream = "0:s:0"
+
     mpegts_metadata = []
     if service_id:
-        mpegts_metadata.append(f'        "-mpegts_service_id", "{service_id}",')
+        mpegts_metadata.append(f'        "-mpegts_service_id", {json.dumps(str(service_id))},')
     if service_name:
-        mpegts_metadata.append(f'        "-metadata", "service_name={service_name}",')
-        mpegts_metadata.append(f'        "-metadata", "service_provider={service_name}",')
-    
-    # Convertir metadatos a string para el template
+        mpegts_metadata.append(f'        "-metadata", {json.dumps("service_name=" + service_name)},')
+        mpegts_metadata.append(f'        "-metadata", {json.dumps("service_provider=" + service_name)},')
     mpegts_metadata_str = "\n".join(mpegts_metadata) if mpegts_metadata else ""
-    
-    # URLs - buffer_size diferenciado por plataforma
+
     buffer_size = "8388608" if PLATFORM == "Darwin" else "26214400"
     source_full = build_url(source_url, local_ip, extra_params=f"fifo_size=2000000&overrun_nonfatal=1&buffer_size={buffer_size}")
     dest_p1_full = build_url(dest_p1, local_ip)
     dest_p4_full = build_url(dest_p4, local_ip)
-    
-    # Resoluciones
+
     p1_w, p1_h = resolution_p1.split("x")
     p4_w, p4_h = resolution_p4.split("x")
-    
-    # Filtro de video
+
     vf_parts = []
     if interlaced:
         if interlace_type == "tff":
             vf_parts.append("bwdif=mode=0:parity=tff:deint=1")
         else:
             vf_parts.append("bwdif=mode=0:parity=bff:deint=1")
-    
-    # Subtitulos
-    subtitle_filter = ""
+
     subtitle_map = ""
     subtitle_codec = ""
-    subtitle_stream = "0:s:0"  # Primer stream de subtítulos por defecto
-    
-    # Detectar stream de subtítulos del análisis
-    if burn_subtitles:
-        # Buscar stream de subtítulos en los datos del análisis
-        # Si no se detecta, usar 0:s:0 como fallback
-        subtitle_map = ""
-        subtitle_codec = ""
-    
-    # Filtro completo
-    # Deinterlacer (si aplica) se aplica primero sobre el video original
+
     deint_chain = ""
     deint_out = "0:v"
     if vf_parts:
         deint_chain = f"[{deint_out}]{' , '.join(vf_parts)}[v_deint]"
         deint_out = "v_deint"
-    
+
     if burn_subtitles:
-        # Orden correcto: overlay → fps → split → scale
-        # 1. Overlay de subtitulos sobre el video (original o deinterlaced)
-        # 2. fps conversion sobre el video + subtitulos combinados
-        # 3. split en dos streams
-        # 4. scale cada stream a su resolucion
         overlay_chain = f"[{deint_out}][{subtitle_stream}]overlay=eof_action=pass:repeatlast=0[v_subbed]"
-        
         chains = []
         if deint_chain:
             chains.append(deint_chain)
@@ -651,43 +701,36 @@ def generate_encoder_script(analysis, source_url, local_ip, dest_p1, dest_p4, ou
         chains.append(f"[v_subbed]fps={output_fps},split=2[v_b1][v_b4]")
         chains.append(f"[v_b1]scale={p1_w}:{p1_h}:flags=fast_bilinear,setsar=1,format=nv12[vout1]")
         chains.append(f"[v_b4]scale={p4_w}:{p4_h}:flags=fast_bilinear,setsar=1,format=nv12[vout2]")
-        
         filter_complex = "; ".join(chains)
     else:
-        # Sin subtitulos: deint → fps → split → scale
         fps_chain = f"[{deint_out}]fps={output_fps},split=2[v_b1][v_b4]"
-        
         chains = []
         if deint_chain:
             chains.append(deint_chain)
         chains.append(fps_chain)
         chains.append(f"[v_b1]scale={p1_w}:{p1_h}:flags=fast_bilinear,setsar=1,format=nv12[vout1]")
         chains.append(f"[v_b4]scale={p4_w}:{p4_h}:flags=fast_bilinear,setsar=1,format=nv12[vout2]")
-        
         filter_complex = "; ".join(chains)
-    
-    # Audio filter
+
     audio_filter = "aresample=48000:async=2000:first_pts=0"
     if audio_downmix:
         audio_filter += ",pan=stereo|FL=c0+0.5*c2+0.5*c4|FR=c1+0.5*c2+0.5*c4"
-    
-    # Configuracion del encoder segun plataforma
-    encoder_config = get_encoder_config()
+
+    encoder_config = get_encoder_config(videotoolbox_cbr=videotoolbox_cbr)
     encoder_args = encoder_config["extra_args"]
     profile_args = encoder_config["profile_arg"]
-    
-    # fflags y vsync: mismos para ambos modos (genpts + cfr = estable)
+    encoder_name = encoder_config["name"]
+
     fflags = "+genpts+discardcorrupt+nobuffer"
     vsync = "cfr"
-    
-    # Construir argumentos del encoder como string para el template
+
     encoder_args_str = ",\n        ".join([f'"{a}"' for a in encoder_args])
     profile_args_str = ",\n        ".join([f'"{a}"' for a in profile_args])
-    
-    # Ruta de ffmpeg segun plataforma
+
     ffmpeg_path = FFMPEG
-    
-    # Generar script
+
+    bsf_line = '        "-bsf:v", "h264_mp4toannexb",\n' if use_annexb_bsf else ""
+
     script = f'''#!/usr/bin/env python3
 """
 Encoder auto-generado por Signal Analyzer
@@ -700,7 +743,7 @@ Analisis:
   - Interlaced: {interlaced} ({interlace_type})
   - Audio: {audio_mapping_val}
   - GOP: {gop} frames
-  - Bitrate P1: {bitrate_p1}k, P4: 2500k
+  - Bitrate P1: {bitrate_p1}k, P4: {bitrate_p4}k
   - Encoder: {encoder_name} ({encoder_config['type']})
 """
 
@@ -710,7 +753,7 @@ import time
 import signal
 import os
 
-RESTART_CALLBACK_URL = {f'"{restart_callback_url}"' if restart_callback_url else 'None'}
+RESTART_CALLBACK_URL = {json.dumps(restart_callback_url) if restart_callback_url else 'None'}
 
 
 keep_running = True
@@ -742,12 +785,11 @@ def notify_orchestrator_restart(channel_name, reason="discontinuity"):
 
 def run_transcoder():
     global keep_running, ffmpeg_process
-    
-    ORIGEN_URL = "{source_full}"
-    DEST_P1_URL = "{dest_p1_full}"
-    DEST_P4_URL = "{dest_p4_full}"
 
-    # NUMA binding para Linux (default node 0)
+    ORIGEN_URL = {json.dumps(source_full)}
+    DEST_P1_URL = {json.dumps(dest_p1_full)}
+    DEST_P4_URL = {json.dumps(dest_p4_full)}
+
     import platform as _platform
     _is_linux = _platform.system() == "Linux"
     _numa_prefix = ["numactl", "--cpunodebind=0", "--membind=0"] if _is_linux else []
@@ -765,10 +807,10 @@ def run_transcoder():
         "-ignore_unknown",
         "-max_delay", "500000",
         "-i", ORIGEN_URL,
-        
-        "-filter_complex", 
-        "{filter_complex}",
-        
+
+        "-filter_complex",
+        {json.dumps(filter_complex)},
+
         "-map", "[vout1]",
         "-map", "{audio_mapping_val}",
         {subtitle_map}
@@ -783,8 +825,7 @@ def run_transcoder():
         "-color_range", "tv",
         {encoder_args_str},
         "-fps_mode", "{vsync}",
-        "-bsf:v", "h264_mp4toannexb",
-        
+{bsf_line}
         "-c:a", "aac",
         "-max_muxing_queue_size", "9999",
         "-b:a", "128k",
@@ -799,21 +840,20 @@ def run_transcoder():
         "-pcr_period", "20",
 {mpegts_metadata_str}
         DEST_P1_URL,
-        
+
         "-map", "[vout2]",
         "-c:v", "{encoder_name}",
         "-aspect", "16:9",
         {profile_args_str},
-        "-b:v", "2500k",
-        "-maxrate", "2500k",
+        "-b:v", "{bitrate_p4}k",
+        "-maxrate", "{bitrate_p4}k",
         "-bufsize", "{bufsize_p4}k",
         "-g", "{gop}",
         "-keyint_min", "{gop}",
         "-color_range", "tv",
         {encoder_args_str},
         "-fps_mode", "{vsync}",
-        "-bsf:v", "h264_mp4toannexb",
-        
+{bsf_line}
         "-muxdelay", "0",
         "-muxpreload", "0",
         "-f", "mpegts",
@@ -823,12 +863,11 @@ def run_transcoder():
         DEST_P4_URL
     ]
 
-
     signal.signal(signal.SIGINT, handle_termination_signal)
     signal.signal(signal.SIGTERM, handle_termination_signal)
-    
+
     print(f"[Orquestador] Servicio de Transcodificacion Iniciado ({encoder_name}).")
-    
+
     while keep_running:
         print("[Orquestador] Lanzando FFmpeg...")
         try:
@@ -838,9 +877,9 @@ def run_transcoder():
                 stderr=subprocess.STDOUT,
                 universal_newlines=True
             )
-            
+
             discontinuity_counter = 0
-            
+
             for line in ffmpeg_process.stdout:
                 sys.stdout.write(line)
                 sys.stdout.flush()
@@ -852,14 +891,14 @@ def run_transcoder():
                         print("[ORQUESTADOR] Forzando reinicio para limpiar relojes...\\n")
                         ffmpeg_process.terminate()
                         break
-                        
+
             ffmpeg_process.wait()
-            
+
         except Exception as e:
             print(f"[Orquestador] Error al invocar el binario: {{e}}")
-        
+
         if keep_running:
-            notify_orchestrator_restart("{service_name or 'unknown'}", "discontinuity")
+            notify_orchestrator_restart({json.dumps(service_name or 'unknown')}, "discontinuity")
             print("[Orquestador] Levantando servicio nuevamente en 5 segundos...\\n")
             time.sleep(5)
         else:
@@ -869,14 +908,14 @@ def run_transcoder():
 if __name__ == "__main__":
     run_transcoder()
 '''
-    
+
     with open(output_path, 'w') as f:
         f.write(script)
-    
+
     os.chmod(output_path, 0o755)
     log(f"Script de encoding generado en: {output_path}", "OK")
     log(f"Plataforma: {platform_name} | Encoder: {encoder_name}", "OK")
-    
+
     return output_path
 
 
@@ -900,41 +939,49 @@ Argumentos:
   dest_multicast_base Base de destino (ej: 238.0.0.130)
 
 Opciones:
-  --analyze-only      Solo ejecutar analisis, no generar script
-  --generate-only     Solo generar script desde analisis existente
-  --duration=N        Duracion del analisis en segundos (default: 300)
-  --p1-port=XXXX      Puerto para perfil P1
-  --p4-port=XXXX      Puerto para perfil P4
-  --burn-subtitles    Quemar subtitulos en el video
-  --service-id=N      Service ID para MPEG-TS (ej: 100)
-  --service-name=X    Nombre del canal/servicio (ej: "Canal 13 HD")
-  --gop-p1=N          GOP para ambos perfiles (default: 60)
-  --audio-mapping=X   Mapeo de audio FFmpeg (default: "0:a:0")
-  --restart-callback-url=X  URL de callback para notificar reinicios FFmpeg
+  --analyze-only            Solo ejecutar analisis, no generar script
+  --generate-only            Solo generar script desde analisis existente
+  --duration=N                Duracion del analisis en segundos (default: 300)
+  --p1-port=XXXX               Puerto para perfil P1
+  --p4-port=XXXX               Puerto para perfil P4
+  --burn-subtitles              Quemar subtitulos (se ignora si la fuente no tiene)
+  --service-id=N                Service ID para MPEG-TS (ej: 100)
+  --service-name=X               Nombre del canal/servicio (ej: "Canal 13 HD")
+  --gop-p1=N                     GOP para ambos perfiles (default: 60)
+  --audio-mapping=X              Mapeo de audio FFmpeg (default: "0:a:0")
+  --restart-callback-url=X       URL de callback para notificar reinicios FFmpeg
+  --bitrate-p4=N                 Bitrate del perfil bajo/SD en kbps, desde BD (default: 2500)
+  --bitrate-p1=N                 Bitrate del perfil HD en kbps, desde BD (4500/5000/6000). Sin BD, se sugiere por resolucion
+  --fps=30|60                    FPS de salida, desde BD segun origen/config del canal (default: 30 -> 29.97fps)
+  --videotoolbox-cbr             Fuerza CBR real en VideoToolbox (requiere FFmpeg >=6.1)
+  --no-annexb-bsf                Omite -bsf:v h264_mp4toannexb en la salida
 
 Ejemplo:
   python3 signal_analyzer.py udp://226.0.0.26:1026 10.0.10.10 238.0.0.130
   python3 signal_analyzer.py udp://226.0.0.26:1026 10.0.10.10 238.0.0.130 --burn-subtitles
-  python3 signal_analyzer.py udp://226.0.0.26:1026 10.0.10.10 238.0.0.130 --service-id=100 --service-name="Canal 13 HD"
 """)
         sys.exit(1)
-    
+
     source_url = sys.argv[1]
     local_ip = sys.argv[2]
     dest_base = sys.argv[3]
-    
-    # Parsear opciones
+
     analyze_only = "--analyze-only" in sys.argv
     generate_only = "--generate-only" in sys.argv
     burn_subtitles = "--burn-subtitles" in sys.argv
+    videotoolbox_cbr = "--videotoolbox-cbr" in sys.argv
+    use_annexb_bsf = "--no-annexb-bsf" not in sys.argv
     duration = ANALYSIS_DURATION
     service_id = None
     service_name = None
-    
-    gop_p1 = 60  # Default
-    audio_mapping = "0:a:0"  # Default
-    restart_callback_url = None  # Default
-    
+
+    gop_p1 = 60
+    audio_mapping = "0:a:0"
+    restart_callback_url = None
+    bitrate_p4 = 2500
+    bitrate_p1 = None
+    fps_target = None
+
     for arg in sys.argv:
         if arg.startswith("--duration="):
             duration = int(arg.split("=")[1])
@@ -948,29 +995,34 @@ Ejemplo:
             audio_mapping = arg.split("=", 1)[1]
         elif arg.startswith("--restart-callback-url="):
             restart_callback_url = arg.split("=", 1)[1]
-    
-    # Calcular puertos destino
+        elif arg.startswith("--bitrate-p4="):
+            bitrate_p4 = int(arg.split("=")[1])
+        elif arg.startswith("--bitrate-p1="):
+            bitrate_p1 = int(arg.split("=")[1])
+        elif arg.startswith("--fps="):
+            fps_target = int(arg.split("=")[1])
+
     port_match = re.search(r':(\d+)', source_url.split("://")[1] if "://" in source_url else source_url)
     if port_match:
         src_port = port_match.group(1)
         suffix = src_port[-3:]
     else:
         suffix = "130"
-    
+
     p1_port = f"4{suffix}"
     p4_port = f"5{suffix}"
-    
+
     for arg in sys.argv:
         if arg.startswith("--p1-port="):
             p1_port = arg.split("=")[1]
         if arg.startswith("--p4-port="):
             p4_port = arg.split("=")[1]
-    
+
     dest_p1 = f"udp://{dest_base}:{p1_port}?fifo_size=65536&buffer_size=65536&reuse=1&pkt_size=1316&ttl=32"
     dest_p4 = f"udp://{dest_base}:{p4_port}?fifo_size=65536&buffer_size=65536&reuse=1&pkt_size=1316&ttl=32"
-    
+
     encoder_type = "h264_videotoolbox (hardware)" if PLATFORM == "Darwin" else "libx264 (software)"
-    
+
     print(f"""
 {C.BOLD}Signal Analyzer & Encoding Script Generator{C.END}
 {C.BOLD}{'=' * 50}{C.END}
@@ -980,24 +1032,27 @@ Ejemplo:
   Dest P1:      {dest_base}:{p1_port}
   Dest P4:      {dest_base}:{p4_port}
   Duracion:     {duration}s
-  Subtitulos:   {'Quemados (hardcoded)' if burn_subtitles else 'No'}
+  Subtitulos:   {'Quemados (si existen)' if burn_subtitles else 'No'}
   Service ID:   {service_id or 'No especificado'}
   Service Name: {service_name or 'No especificado'}
   GOP P1:       {gop_p1}
   Audio Map:    {audio_mapping}
+  Bitrate P1:   {f"{bitrate_p1}k (BD)" if bitrate_p1 is not None else "auto (sin BD)"}
+  Bitrate P4:   {bitrate_p4}k
+  FPS salida:   {f"{fps_target}fps (BD)" if fps_target is not None else "29.97fps (fallback)"}
   Modo:         {'Solo analisis' if analyze_only else 'Solo generar' if generate_only else 'Completo'}
 """)
-    
+
     analysis = None
-    
-    # Fase 1: Analisis
+
     if not generate_only:
-        analysis = analyze_source(source_url, local_ip, duration, gop_p1=gop_p1, audio_mapping=audio_mapping)
+        analysis = analyze_source(source_url, local_ip, duration, gop_p1=gop_p1,
+                                   audio_mapping=audio_mapping, bitrate_p4=bitrate_p4,
+                                   bitrate_p1=bitrate_p1, fps_target=fps_target)
         if not analysis:
             log("El analisis fallo. No se puede continuar.", "ERR")
             sys.exit(1)
-    
-    # Fase 2: Generar script
+
     if not analyze_only:
         if not analysis:
             if os.path.exists(ANALYSIS_OUTPUT):
@@ -1007,17 +1062,19 @@ Ejemplo:
             else:
                 log("No se encontro analisis existente. Ejecute sin --generate-only primero.", "ERR")
                 sys.exit(1)
-        
+
         script_path = generate_encoder_script(
-            analysis, source_url, local_ip, dest_p1, dest_p4, 
+            analysis, source_url, local_ip, dest_p1, dest_p4,
             burn_subtitles=burn_subtitles,
             service_id=service_id,
             service_name=service_name,
             gop_p1=gop_p1,
             audio_mapping=audio_mapping,
-            restart_callback_url=restart_callback_url
+            restart_callback_url=restart_callback_url,
+            videotoolbox_cbr=videotoolbox_cbr,
+            use_annexb_bsf=use_annexb_bsf,
         )
-        
+
         print(f"\n{C.GREEN}Script generado: {script_path}{C.END}")
         print(f"Ejecutar con: python3 {script_path}")
 
