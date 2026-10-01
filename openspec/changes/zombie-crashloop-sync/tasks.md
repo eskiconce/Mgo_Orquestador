@@ -13,7 +13,7 @@
 - [x]] 9. A7 — timestamp consola/BD idéntico (truncar µs; CMS usa el mismo instante)
 - [x]] 10. A8 — dropdown `/ui/monitor-logs` con todos los tipos de evento + badges
 - [x]] 11. A9 — tests (stop_job 502, rate-limit CMS, log sin commit propio, zombie inestable) + v2.20.0 + CHANGELOG + docs/monitor-zombie-crashloop.md
-- [ ] 12. A10 — push GitHub + deploy solo de código + restart `encoder-monitor` + `encoder-api` + verificación
+- [x]] 12. A10 — push GitHub + deploy solo de código + restart `encoder-monitor` + `encoder-api` + verificación
 
 ## Fase B — Api_agent-linux (mañana)
 
