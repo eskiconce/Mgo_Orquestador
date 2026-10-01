@@ -187,12 +187,20 @@ async def stop_job(job_id: int, db: Session = Depends(get_db), current_user: mod
     if current_user.role not in ("admin", "operator"):
         raise HTTPException(status_code=403, detail="Acceso denegado")
     job = db.query(models.EncodingJob).filter(models.EncodingJob.id == job_id).first()
+    if job is None:
+        raise HTTPException(404, "Job no encontrado")
     import httpx
     try:
         async with httpx.AsyncClient(timeout=10.0) as client:
-            await client.post(f"http://{job.node.ip_address}:{AGENT_PORT}/jobs/control", params={"action": "stop", "program_name": f"{'pkg' if job.node.tipo == 'Packager' else 'channel'}_{job.channel.channel_name}_{job.id}"}, headers={"X-API-Key": get_api_key()})
-    except Exception:
-        pass
+            resp = await client.post(f"http://{job.node.ip_address}:{AGENT_PORT}/jobs/control", params={"action": "stop", "program_name": f"{'pkg' if job.node.tipo == 'Packager' else 'channel'}_{job.channel.channel_name}_{job.id}"}, headers={"X-API-Key": get_api_key()})
+        if resp.status_code != 200:
+            logger.warning(f"Stop-job {job_id}: agente {job.node.hostname} respondió {resp.status_code} — no se marca 'stopped' en BD")
+            raise HTTPException(status_code=502, detail=f"El agente {job.node.hostname} no confirmó la detención (HTTP {resp.status_code}). El job NO fue marcado como detenido.")
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.warning(f"Stop-job {job_id}: fallo de comunicación con agente {job.node.hostname}: {e} — no se marca 'stopped' en BD")
+        raise HTTPException(502, detail=f"Sin respuesta del agente {job.node.hostname}: {e}. El job NO fue marcado como detenido.")
     job.status = "stopped"
     db.commit()
     if job.node.tipo == 'Packager':

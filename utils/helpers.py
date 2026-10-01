@@ -118,19 +118,26 @@ async def task_delayed_action(action: str, targets: list, delay: int = 15):
             except Exception as e:
                 logger.error(f"Fallo background task para {t.get('url')}: {e}")
 
-def log_monitor_event(db: Session, event_type: str, message: str, node_id: int = None):
+def log_monitor_event(db: Session, event_type: str, message: str, node_id: int = None, timestamp: datetime = None):
     """
     Guarda un evento del monitor en la base de datos.
-    Ej: log_monitor_event(db, "NODE_DOWN", "El nodo Origin_2 no responde al ping", 12)
+
+    NO ejecuta db.commit() (A5): el commit lo hace el call-path (commit final del ciclo,
+    commit explícito de la ruta o de la función que notifica). Esto elimina los deadlocks
+    MySQL 1213 causados por commits intermedios en cada evento.
+
+    El timestamp se trunca a segundos (A7) para que consola y BD muestren el mismo
+    segundo (MySQL DATETIME(0) redondea los microsegundos y desalineaba +1s).
     """
     try:
+        ts = timestamp or datetime.now()
         new_alert = models.MonitorLog(
             event_type=event_type,
             message=message,
             node_id=node_id,
-            timestamp=datetime.now()
+            timestamp=ts.replace(microsecond=0)
         )
         db.add(new_alert)
-        db.commit()
+        db.flush()
     except Exception as e:
         logger.error(f"Fallo al guardar log del monitor en BD: {e}")

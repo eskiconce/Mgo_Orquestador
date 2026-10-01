@@ -13,17 +13,23 @@
         <form method="GET" action="/ui/monitor-logs" class="row g-3 align-items-end">
             <div class="col-md-3">
                 <label class="form-label small fw-bold text-muted">Tipo de Evento</label>
+                {% set event_types = [
+                    "NODE_UP", "NODE_DOWN", "NODE_RECOVERY",
+                    "FAILOVER_ACTIVATED", "FAILOVER_RESTORED",
+                    "PROCESS_CRASHED", "PROCESS_SYNCED", "PROCESS_START_FAIL",
+                    "AUTO_KILL", "AUTO_START", "AUTO_RESYNC", "AUTO_RESTART",
+                    "ZOMBIE_DETECTED", "ZOMBIE_UNSTABLE", "GHOST_CLEANUP",
+                    "TIMESTAMP_DISCONTINUITY", "DROP_FRAMES",
+                    "ENCODER_RESTART", "ENCODER_RESTART_RECOVERY", "PACKAGER_RESTART",
+                    "ENCODER_STOPPED", "ENCODER_STARTED", "ENCODER_RESTARTED",
+                    "CMS_OFFLINE", "CMS_ONLINE", "CMS_ERROR", "CMS_WARNING", "CMS_RESTART",
+                    "TSMONITOR_ALERT"
+                ] %}
                 <select name="event_type" class="form-select font-monospace">
                     <option value="">TODOS</option>
-                    <option value="NODE_DOWN" {% if filters.event_type == 'NODE_DOWN' %}selected{% endif %}>NODE_DOWN</option>
-                    <option value="NODE_UP" {% if filters.event_type == 'NODE_UP' %}selected{% endif %}>NODE_UP</option>
-                    <option value="FAILOVER_ACTIVATED" {% if filters.event_type == 'FAILOVER_ACTIVATED' %}selected{% endif %}>FAILOVER_ACTIVATED</option>
-                    <option value="FAILOVER_RESTORED" {% if filters.event_type == 'FAILOVER_RESTORED' %}selected{% endif %}>FAILOVER_RESTORED</option>
-                    <option value="PROCESS_CRASHED" {% if filters.event_type == 'PROCESS_CRASHED' %}selected{% endif %}>PROCESS_CRASHED</option>
-                    <option value="AUTO_KILL" {% if filters.event_type == 'AUTO_KILL' %}selected{% endif %}>AUTO_KILL</option>
-                    <option value="AUTO_START" {% if filters.event_type == 'AUTO_START' %}selected{% endif %}>AUTO_START</option>
-                    <option value="AUTO_RESYNC" {% if filters.event_type == 'AUTO_RESYNC' %}selected{% endif %}>AUTO_RESYNC</option>
-                    <option value="ZOMBIE_DETECTED" {% if filters.event_type == 'ZOMBIE_DETECTED' %}selected{% endif %}>ZOMBIE_DETECTED</option>
+                    {% for et in event_types %}
+                    <option value="{{ et }}" {% if filters.event_type == et %}selected{% endif %}>{{ et }}</option>
+                    {% endfor %}
                 </select>
             </div>
             <div class="col-md-4">
@@ -60,12 +66,14 @@
                     <td>
                         {% if log.event_type == 'NODE_UP' %}
                             <span class="badge bg-success w-100 py-1"><i class="fas fa-arrow-up me-1"></i>NODE_UP</span>
-                        {% elif log.event_type in ['NODE_DOWN', 'PROCESS_CRASHED', 'AUTO_KILL', 'PROCESS_START_FAIL'] %}
+                        {% elif log.event_type in ['NODE_DOWN', 'PROCESS_CRASHED', 'AUTO_KILL', 'PROCESS_START_FAIL', 'ENCODER_STOPPED', 'CMS_OFFLINE', 'CMS_ERROR'] %}
                             <span class="badge bg-danger w-100 py-1 shadow-sm"><i class="fas fa-exclamation-triangle me-1"></i>{{ log.event_type }}</span>
-                        {% elif log.event_type in ['FAILOVER_ACTIVATED', 'ZOMBIE_DETECTED'] %}
+                        {% elif log.event_type in ['FAILOVER_ACTIVATED', 'ZOMBIE_DETECTED', 'ZOMBIE_UNSTABLE', 'AUTO_RESTART', 'DROP_FRAMES', 'TIMESTAMP_DISCONTINUITY', 'CMS_WARNING'] %}
                             <span class="badge bg-warning text-dark w-100 py-1 shadow-sm"><i class="fas fa-shield-alt me-1"></i>{{ log.event_type }}</span>
-                        {% elif log.event_type in ['AUTO_START', 'AUTO_RESYNC', 'FAILOVER_RESTORED'] %}
+                        {% elif log.event_type in ['NODE_RECOVERY', 'AUTO_START', 'AUTO_RESYNC', 'FAILOVER_RESTORED', 'PROCESS_SYNCED', 'ENCODER_STARTED', 'CMS_ONLINE'] %}
                             <span class="badge bg-info text-dark w-100 py-1 shadow-sm"><i class="fas fa-magic me-1"></i>{{ log.event_type }}</span>
+                        {% elif log.event_type in ['ENCODER_RESTART', 'ENCODER_RESTARTED', 'ENCODER_RESTART_RECOVERY', 'PACKAGER_RESTART', 'CMS_RESTART'] %}
+                            <span class="badge bg-primary w-100 py-1 shadow-sm"><i class="fas fa-redo me-1"></i>{{ log.event_type }}</span>
                         {% else %}
                             <span class="badge bg-secondary w-100 py-1">{{ log.event_type }}</span>
                         {% endif %}
@@ -77,7 +85,7 @@
                             <span class="text-muted fst-italic">Global</span>
                         {% endif %}
                     </td>
-                    <td class="{% if log.event_type in ['NODE_DOWN', 'PROCESS_CRASHED', 'AUTO_KILL'] %}text-danger fw-bold{% elif log.event_type in ['FAILOVER_ACTIVATED'] %}text-dark fw-bold{% else %}text-secondary{% endif %}">
+                    <td class="{% if log.event_type in ['NODE_DOWN', 'PROCESS_CRASHED', 'AUTO_KILL', 'ENCODER_STOPPED', 'CMS_OFFLINE', 'CMS_ERROR'] %}text-danger fw-bold{% elif log.event_type in ['FAILOVER_ACTIVATED', 'ZOMBIE_UNSTABLE', 'ZOMBIE_DETECTED'] %}text-dark fw-bold{% else %}text-secondary{% endif %}">
                         {{ log.message }}
                     </td>
                 </tr>

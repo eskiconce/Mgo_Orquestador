@@ -147,10 +147,10 @@ def handle_encoder_restart_recovery(db, node, req_session):
         except Exception as e:
             logger.warning(f"  ❌ {prog_name} → exception: {e}")
 
-    db.commit()
     log_monitor_event(db, "ENCODER_RESTART_RECOVERY",
                      f"Recovery post-restart: {len(ghost_jobs)} jobs relanzados en {node.hostname}",
                      node.id)
+    db.commit()
 
     try:
         from .alerts import notify_telegram

@@ -37,7 +37,7 @@
 
 ### Versión actual
 
-- **v2.19.0** (29 Sep 2026)
+- **v2.20.0** (30 Sep 2026)
 - Python 3.9+
 - FastAPI + SQLAlchemy + MySQL
 

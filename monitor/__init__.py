@@ -13,7 +13,7 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from database import SessionLocal
 import models
-from core.config import POLL_INTERVAL, AGENT_PORT
+from core.config import POLL_INTERVAL, AGENT_PORT, ZOMBIE_MIN_UPTIME, ZOMBIE_DEDUPE_SECONDS
 from core.http_client import create_sync_client
 from utils.helpers import log_monitor_event
 
@@ -45,6 +45,12 @@ for _log in ("httpx", "httpcore", "hpack"):
 logger = logging.getLogger(__name__)
 
 _cleanup_counter = 0
+
+# Ventana de observación de zombies efímeros (job.id -> primera vez visto RUNNING sin permiso).
+# Necesaria porque el agente Linux reporta start=0 (no hay uptime real disponible).
+_zombie_watch = {}
+# Dedupe de ZOMBIE_DETECTED (job.id -> último registro de consola/BD).
+_zombie_last_log = {}
 
 
 def process_node_thread(node_id):
@@ -94,6 +100,7 @@ def process_node_thread(node_id):
                 log_monitor_event(db, "NODE_UP", f"El servidor {node.hostname} ({node.ip_address}) ha vuelto a responder al orquestador.", node.id)
                 node.status = "online"
                 recover_node_jobs(db, node, req_session)
+                db.commit()
 
             node.last_heartbeat = datetime.now()
 
@@ -101,8 +108,8 @@ def process_node_thread(node_id):
             if node.status != "offline":
                 logger.error(f"🔴 Nodo {node.hostname} ({node.ip_address}) está OFFLINE. Error: {e}")
                 node.status = "offline"
-                db.commit()
                 log_monitor_event(db, "NODE_DOWN", f"El servidor {node.hostname} ({node.ip_address}) ha dejado de responder.", node.id)
+                db.commit()
 
             time_since_last_beat = 46
             if getattr(node, 'last_heartbeat', None):
@@ -133,18 +140,46 @@ def process_node_thread(node_id):
                     real_info = process_map[prog_name_lower]
                     state = real_info['statename']
 
-                if job.status == "stopped" and state == "RUNNING" and not job.auto_started:
-                    logger.warning(f"👻 ZOMBIE: {prog_name} corre sin permiso.")
-                    log_monitor_event(db, "ZOMBIE_DETECTED", f"Proceso {prog_name} corría sin permiso. se asume como RUNNING.", node.id)
-                    job.status = "running"
-                    start_val = real_info.get('start', 0)
-                    job.started_at = datetime.fromtimestamp(start_val) if start_val > 0 else datetime.now()
+                unstable_zombie = False
+                if job.status in ("stopped", "error") and state == "RUNNING" and not job.auto_started:
+                    start_val = real_info.get('start', 0) if real_info else 0
+                    if start_val > 0:
+                        uptime = (datetime.now() - datetime.fromtimestamp(start_val)).total_seconds()
+                        _zombie_watch.pop(job.id, None)
+                    else:
+                        first_seen = _zombie_watch.setdefault(job.id, datetime.now())
+                        uptime = (datetime.now() - first_seen).total_seconds()
+
+                    if uptime < ZOMBIE_MIN_UPTIME:
+                        # Zombie efímero: NO se adopta. Se marca error para cortar el ciclo
+                        # crash-loop (no CMS offline, no PROCESS_SYNCED, no RECOVERY-RETRY).
+                        unstable_zombie = True
+                        if job.status == "stopped":
+                            logger.warning(f"👻 ZOMBIE INESTABLE: {prog_name} aparece RUNNING con uptime {uptime:.0f}s (< {ZOMBIE_MIN_UPTIME}s). No se adopta; se marca error.")
+                            log_monitor_event(db, "ZOMBIE_UNSTABLE", f"Proceso {prog_name} aparece RUNNING con uptime {uptime:.0f}s (< {ZOMBIE_MIN_UPTIME}s). No se adopta; marcado como error.", node.id)
+                            job.status = "error"
+                            job.auto_started = False
+                            job.started_at = None
+                            job.updated_at = datetime.now()
+                    else:
+                        _zombie_watch.pop(job.id, None)
+                        if job.status == "stopped":
+                            last = _zombie_last_log.get(job.id)
+                            if not last or (datetime.now() - last).total_seconds() >= ZOMBIE_DEDUPE_SECONDS:
+                                _zombie_last_log[job.id] = datetime.now()
+                                logger.warning(f"👻 ZOMBIE: {prog_name} corre sin permiso (uptime {uptime:.0f}s >= {ZOMBIE_MIN_UPTIME}s). Se adopta.")
+                                log_monitor_event(db, "ZOMBIE_DETECTED", f"Proceso {prog_name} corría sin permiso (uptime {uptime:.0f}s). se asume como RUNNING.", node.id)
+                            job.status = "running"
+                            job.started_at = datetime.fromtimestamp(start_val) if start_val > 0 else datetime.now()
+                elif job.id in _zombie_watch:
+                    # Estado ya no es candidato: reinicia la ventana de observación.
+                    _zombie_watch.pop(job.id, None)
 
                 if state == "RUNNING":
                     if real_info and real_info.get('bitrate'): job.current_bitrate = str(real_info['bitrate'])
                     if real_info and real_info.get('fps'): job.current_fps = float(real_info['fps'])
 
-                    if job.status not in ["running", "failover"]:
+                    if job.status not in ["running", "failover"] and not unstable_zombie:
                         logger.info(f"✅ Sincronizado: {prog_name} en estado RUNNING.")
                         log_monitor_event(db, "PROCESS_SYNCED", f"Proceso {prog_name} paso a estado RUNNING.", node.id)
                         job.status = "running"
@@ -152,7 +187,7 @@ def process_node_thread(node_id):
                         _ts_error_state.pop(job.id, None)
                         _prev_logs.pop(f"{prog_name}_err", None)
 
-                    if real_info and 'start' in real_info:
+                    if not unstable_zombie and real_info and 'start' in real_info:
                         start_ts = real_info.get('start', 0)
                         if start_ts > 0:
                             real_start = datetime.fromtimestamp(start_ts)

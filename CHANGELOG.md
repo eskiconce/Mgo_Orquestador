@@ -1,5 +1,18 @@
 # Changelog — Encoder Orchestrator
 
+## v2.20.0 (30 Sep 2026) — Issue #12: Anti-zombie + crash-loop sync + eventos CMS
+
+- Fix: **anti-zombie efímero** — un proceso RUNNING sin permiso con uptime < 30s ya no se adopta como `running`; se registra `ZOMBIE_UNSTABLE` y se marca `error` con `started_at=None` (corta el ciclo crash-loop: sin CMS offline, sin PROCESS_SYNCED, sin RECOVERY-RETRY). Adopción recién tras 30s continuos de RUNNING (ventana en memoria cuando el agente reporta `start=0`)
+- Nuevo: dedupe de `ZOMBIE_DETECTED` — máximo 1 evento por job cada 5 min (consola + BD juntas)
+- Nuevo: rate-limit de notificaciones CMS — omite webhook/consola/fila si el mismo `(canal, evento)` se notificó hace < 10 min (`cms.rate_limit_sec` en app_settings, default 600s)
+- Nuevo: eventos `CMS_OFFLINE/ONLINE/ERROR/WARNING/RESTART` persistidos en `monitor_logs` cuando el webhook sí se envía
+- Fix: `log_monitor_event` **sin `db.commit()` propio** — eliminados los deadlocks MySQL 1213; commits explícitos agregados solo en los paths que perderían eventos (ruta offline del monitor, NODE_UP/NODE_RECOVERY, ENCODER_RESTART/PACKAGER_RESTART en `internal.py`, ENCODER_RESTART_RECOVERY)
+- Fix: timestamp consola/BD idéntico — `log_monitor_event` trunca microsegundos (el `DATETIME(0)` de MySQL redondeaba +1s respecto a la consola)
+- Fix: `stop_job` honesto — HTTP != 200 o fallo de red del agente → HTTP 502 y el job **NO** se marca `stopped` (eliminado el `except: pass` silencioso)
+- Modificado: `/ui/monitor-logs` — dropdown con los 29 tipos de evento reales del sistema + badges consistentes
+- Fase A del cambio OpenSpec `zombie-crashloop-sync` (fase B en Api_agent-linux pendiente)
+- Issue: https://github.com/eskiconce/Mgo_Orquestador/issues/12
+
 ## v2.19.0 (29 Sep 2026) — Issue #10: Parámetros Generales + fuentes de alertas
 
 - Nuevo: dropdown **Parámetros Generales** en menú (Usuarios + Parámetros; Reglas Alertas y KMS sin cambios)

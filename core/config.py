@@ -13,6 +13,13 @@ DRM_HEALTH_PORT = int(os.getenv("DRM_HEALTH_PORT", "8080"))
 POLL_INTERVAL = int(os.getenv("POLL_INTERVAL", "10"))
 
 # ==========================================
+# ANTI-ZOMBIE Y ALERTAS (Issue #12)
+# ==========================================
+ZOMBIE_MIN_UPTIME = int(os.getenv("ZOMBIE_MIN_UPTIME", "30"))
+ZOMBIE_DEDUPE_SECONDS = int(os.getenv("ZOMBIE_DEDUPE_SECONDS", "300"))
+CMS_RATE_LIMIT_SECONDS = int(os.getenv("CMS_RATE_LIMIT_SECONDS", "600"))
+
+# ==========================================
 # INTEGRACIÓN CMS Y VOD
 # ==========================================
 ORCHESTRATOR_WEBHOOK_URL = os.getenv("ORCHESTRATOR_WEBHOOK_URL", "http://172.16.223.5:9000/api/internal/vod-webhook")

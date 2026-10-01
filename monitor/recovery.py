@@ -80,8 +80,8 @@ def recover_node_jobs(db, node, req_session):
                     logger.info(f"  ✅ {prog_name} → starting (start)")
             except Exception as re:
                 logger.warning(f"  ❌ {prog_name} → exception: {re}")
-        db.commit()
         log_monitor_event(db, "NODE_RECOVERY", f"Relanzados {len(error_jobs)} jobs en {node.hostname} tras recuperación.", node.id)
+        db.commit()
 
 
 def cleanup_ghost_jobs(db, node, req_session):

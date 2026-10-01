@@ -11,7 +11,7 @@ from core.deps import templates, get_current_user
 from core.config import AGENT_PORT
 from services.settings_service import get_api_key
 from services import builders
-from utils.helpers import sync_haproxy_map
+from utils.helpers import sync_haproxy_map, log_monitor_event
 from core.logging_service import logger
 from routers.orchestrator import analyze_tasks
 
@@ -117,11 +117,9 @@ async def notify_encoder_restart(data: dict = Body(...), db: Session = Depends(g
 
     log_msg = f"Encoder reiniciado: canal={channel_name}, razón={reason}, job={job.id}"
     logger.info(log_msg)
-    try:
-        from utils.helpers import log_monitor_event
-        log_monitor_event(db, "ENCODER_RESTART", log_msg, job.node_id)
-    except Exception:
-        pass
+    # A5: commit explícito — get_db cierra sin commit, el evento se perdería.
+    log_monitor_event(db, "ENCODER_RESTART", log_msg, job.node_id)
+    db.commit()
 
     # Reiniciar packager asociado para resincronizar stream
     try:
@@ -141,7 +139,9 @@ async def notify_encoder_restart(data: dict = Body(...), db: Session = Depends(g
                 db.commit()
                 pkg_msg = f"Packager {packager_job.id} reiniciado tras restart de encoder {channel_name}"
                 logger.info(pkg_msg)
+                # A5: commit explícito — get_db cierra sin commit, el evento se perdería.
                 log_monitor_event(db, "PACKAGER_RESTART", pkg_msg, packager_job.node_id)
+                db.commit()
             else:
                 logger.warning(f"Packager restart falló: status={resp.status_code}")
     except Exception as e:
