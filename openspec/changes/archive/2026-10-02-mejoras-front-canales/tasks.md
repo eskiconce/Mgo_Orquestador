@@ -18,10 +18,10 @@
 
 ## Deploy y verificación
 
-- [ ] 8. Push a GitHub (fuente principal)
-- [ ] 9. Deploy solo código a `172.16.223.5` + restart `encoder-monitor` + `encoder-api` + verificar servicios activos
-- [ ] 10. QA manual en UI: alta de canal (espacios rechazados, program_id = unique_id, bitrate 4500k editable, sin switch DRM), escaneo (resolución auto-rellenada + bitrate 4500k + program_id intacto), edición (mismos comportamientos)
+- [x] 8. Push a GitHub (fuente principal)
+- [x] 9. Deploy solo código a `172.16.223.5` + restart `encoder-monitor` + `encoder-api` + verificar servicios activos
+- [x] 10. QA manual en UI: alta de canal (espacios rechazados, program_id = unique_id, bitrate 4500k editable, sin switch DRM), escaneo (resolución auto-rellenada + bitrate 4500k + program_id intacto), edición (mismos comportamientos)
 
 ## Cierre
 
-- [ ] 11. `openspec archive mejoras-front-canales` + cierre del issue tras deploy exitoso
+- [x] 11. `openspec archive mejoras-front-canales` + cierre del issue tras deploy exitoso
