@@ -1,5 +1,17 @@
 # Changelog — Encoder Orchestrator
 
+## v2.22.3 (2 Oct 2026) — Issue #17: Resolución y bitrates por origen (signal_analyzer)
+
+- Mejora: **`generate_recommendations()` ajusta P1/P2 y bitrates a la resolución detectada cuando el origen está bajo 720** (regla aprobada: cualquier señal bajo 720)
+  - **Tier SD**: P1 = resolución nativa en pares (sin upscale); P2 = 50% de P1 en pares con tope 640x360 (ej: 720x576→360x288, 640x360→320x180, 480x270→240x134)
+  - **Bitrates SD**: P1 **2500k** / P2 **700k** gobiernan **sobre los valores de BD** (antes BD 6500k/2500k prevalecía); reason explícito en la recomendación; `bufsize = 2x` sobre el valor final
+  - **GOP**: sin cambios — siempre de BD
+  - **Defensa**: `width/height` no detectados → fallback tier 1280x720 + warning (antes producía `resolution_p1 = "0x0"` → `scale=0:0` inválido)
+  - Tiers ≥1080/≥720: comportamiento intacto (prioridad BD, fallback sugerido)
+- Tests: 15 nuevos (`tests/test_signal_analyzer_recs.py`) — suite completa: **128 en verde**
+- Fuera de alcance: copias stale de `Api_agent-*` (1026 líneas), clasificación por height, UI/BD
+- Issue: https://github.com/eskiconce/Mgo_Orquestador/issues/17
+
 ## v2.22.1 (2 Oct 2026) — Issue #15: Mover Nodo de Encoder sincroniza IP multicast del script
 
 - Fix: **`move_job` actualiza la IP multicast en `job.command` al mover un Encoder** — antes solo reasignaba `job.node_id` y el script conservaba el `LOCADDRESS`/`localaddr` del nodo origen (al iniciar, ffmpeg bindeaba la interfaz equivocada)

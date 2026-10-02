@@ -12,7 +12,7 @@
 
 ## Versionado y documentación
 
-- [ ] 5. Bump **v2.22.2** (PATCH) en `core/version.py` + entrada en `CHANGELOG.md`
+- [ ] 5. Bump **v2.22.4** (PATCH) en `core/version.py` + entrada en `CHANGELOG.md`
 
 ## Deploy y verificación
 

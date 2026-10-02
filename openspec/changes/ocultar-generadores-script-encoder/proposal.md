@@ -2,7 +2,7 @@
 
 **Issue:** https://github.com/eskiconce/Mgo_Orquestador/issues/16
 **Fecha:** 2026-10-02
-**Versión objetivo:** v2.22.2 (PATCH)
+**Versión objetivo:** v2.22.4 (PATCH) — renumerado tras liberar v2.22.3 (issue #17)
 **Estado:** plan aprobado — pendiente de implementación
 
 ## Why

@@ -488,10 +488,21 @@ def generate_recommendations(analysis, gop_p1=60, audio_mapping="0:a:0", bitrate
     source_fps = video.get("fps_eval", 29.97)
     recs.append({"category": "gop", "value": gop_p1, "reason": f"GOP={gop_p1} (desde BD, segun tamaño de segmento del packager)"})
 
-    width = video.get("width", 0)
-    height = video.get("height", 0)
+    width = int(video.get("width") or 0)
+    height = int(video.get("height") or 0)
 
-    if width >= 1920:
+    # Tier SD = cualquier origen bajo 720. En SD, la deteccion gobierna
+    # resolucion y bitrates de ambos perfiles (aun si BD trae otros valores).
+    is_sd = False
+
+    if width <= 0 or height <= 0:
+        recs.append({"category": "resolution_warning", "value": "fallback_720p",
+                     "reason": "Resolucion de origen no detectada - fallback 1280x720"})
+        suggested_bitrate_p1 = 4000
+        resolution_p1 = "1280x720"
+        resolution_p4 = "852x480"
+        suggested_bitrate_p4 = 1200
+    elif width >= 1920:
         suggested_bitrate_p1 = 4500
         resolution_p1 = "1920x1080"
         resolution_p4 = "852x480"
@@ -502,9 +513,14 @@ def generate_recommendations(analysis, gop_p1=60, audio_mapping="0:a:0", bitrate
         resolution_p4 = "852x480"
         suggested_bitrate_p4 = 1200
     else:
+        is_sd = True
+        p1_w = max(width - (width % 2), 2)
+        p1_h = max(height - (height % 2), 2)
+        p2_w = max(min(p1_w // 2, 640) - (min(p1_w // 2, 640) % 2), 2)
+        p2_h = max(min(p1_h // 2, 360) - (min(p1_h // 2, 360) % 2), 2)
+        resolution_p1 = f"{p1_w}x{p1_h}"
+        resolution_p4 = f"{p2_w}x{p2_h}"
         suggested_bitrate_p1 = 2500
-        resolution_p1 = f"{width}x{height}"
-        resolution_p4 = "640x360"
         suggested_bitrate_p4 = 700
 
     recs.append({"category": "resolution_p1", "value": resolution_p1, "reason": "Resolucion del perfil principal segun origen"})
@@ -514,7 +530,12 @@ def generate_recommendations(analysis, gop_p1=60, audio_mapping="0:a:0", bitrate
     # bitrate_p1 (HD): siempre deberia venir de la BD (4500/5000/6000k segun
     # origen). Si no se especifica, se usa el sugerido por resolucion como
     # respaldo, dejando claro que es una sugerencia, no un valor de canal.
-    if bitrate_p1 is not None:
+    # En SD manda lo detectado: se ignora el valor de BD.
+    if is_sd:
+        bd_note = f" (BD: {bitrate_p1}k ignorado)" if bitrate_p1 is not None else ""
+        recs.append({"category": "bitrate_p1", "value": suggested_bitrate_p1,
+                     "reason": f"Bitrate SD ajustado a origen detectado {resolution_p1}{bd_note}"})
+    elif bitrate_p1 is not None:
         recs.append({"category": "bitrate_p1", "value": bitrate_p1, "reason": f"Bitrate HD desde BD: {bitrate_p1}k"})
     else:
         recs.append({"category": "bitrate_p1", "value": suggested_bitrate_p1, "reason": f"Sin bitrate de BD - sugerido por resolucion ({resolution_p1})"})
@@ -532,8 +553,13 @@ def generate_recommendations(analysis, gop_p1=60, audio_mapping="0:a:0", bitrate
 
     bitrate_p1_final = next(r["value"] for r in recs if r["category"] == "bitrate_p1")
     recs.append({"category": "bufsize_p1", "value": bitrate_p1_final * 2, "reason": f"bufsize = 2x bitrate ({bitrate_p1_final * 2}k)"})
-    recs.append({"category": "bitrate_p4", "value": bitrate_p4, "reason": "bitrate_p4 configurado (SD, normalmente fijo en 2500k por BD)"})
-    recs.append({"category": "bufsize_p4", "value": bitrate_p4 * 2, "reason": f"bufsize = 2x bitrate ({bitrate_p4 * 2}k)"})
+    if is_sd:
+        recs.append({"category": "bitrate_p4", "value": suggested_bitrate_p4,
+                     "reason": f"Bitrate SD ajustado a origen detectado {resolution_p1} (BD: {bitrate_p4}k ignorado)"})
+    else:
+        recs.append({"category": "bitrate_p4", "value": bitrate_p4, "reason": "bitrate_p4 configurado (SD, normalmente fijo en 2500k por BD)"})
+    bitrate_p4_final = next(r["value"] for r in recs if r["category"] == "bitrate_p4")
+    recs.append({"category": "bufsize_p4", "value": bitrate_p4_final * 2, "reason": f"bufsize = 2x bitrate ({bitrate_p4_final * 2}k)"})
 
     recs.append({"category": "muxrate", "value": "none", "reason": "No usar muxrate fijo (causa dts<pcr)"})
 
