@@ -18,7 +18,7 @@
 
 - [x] 6. Push a GitHub (fuente principal)
 - [x] 7. Deploy orquestador: `scripts/signal_analyzer.py` + `core/version.py` → `172.16.223.5` + restart `encoder-monitor` + `encoder-api` + verificar activos
-- [x] 8. Copiar `signal_analyzer.py` corregido a encoders: mac_05 `172.16.222.155`, mac_02 `172.16.223.8`, encoder_02 `172.16.222.233`, encoder_03 `172.16.222.235` (mac_01 `172.16.223.10` pendiente — auth SSH rechazada)
+- [x] 8. Copiar `signal_analyzer.py` corregido a encoders: mac_05 `172.16.222.155`, mac_02 `172.16.223.8`, encoder_02 `172.16.222.233`, encoder_03 `172.16.222.235` (mac_01 `172.16.223.10` desplegado 2026-10-02 — auth resuelta, fallo transitorio)
 - [x] 9. QA: `--generate-only` con análisis SD real → script con P1 nativa, P2 escalonado, bitrates 2500/700, `scale=` correcto; QA regresión con señal HD existente
 
 ## Cierre
@@ -30,4 +30,4 @@
 - Sincronizar copias stale de `Api_agent-mac|linux` `scripts/signal_analyzer.py` (1026 líneas, drift pre-existente vs 1083 del orquestador)
 - Clasificación por `height` (1440x1080 mantiene tier actual)
 - UI / BD / audio / GOP
-- mac_01 (172.16.223.10): resolver auth SSH para deploy
+- ~~mac_01 (172.16.223.10)~~ Resuelto: acceso OK con `soporte/deepseek` (el rechazo anterior fue transitorio); `signal_analyzer.py` v2.22.3 (1109 líneas) desplegado + QA SD/0x0 verificado 2026-10-02
