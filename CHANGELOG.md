@@ -1,5 +1,13 @@
 # Changelog — Encoder Orchestrator
 
+## v2.22.0 (2 Oct 2026) — Issue #14: Numeración de streams por tipo + subtítulo PID relativo
+
+- Modificado: **modal de escaneo numera `Stream #` por tipo desde #0** — video, audio y subtítulos cada grupo inicia en #0 (antes índice global ffprobe: audio mostraba #1 mientras enviaba `0:a:0`); el PID MPEG real se conserva informativo junto al número
+- Modificado: **`subtitle_pid` como ordinal de subtítulo** — el radio envía el ordinal dentro de subtítulos (1er sub → 0, antes índice global → 7); el auto-fill tras escaneo usa el mismo criterio; placeholder `Ej: 0` (antes `Ej: 11`) — coherente con `audio_mapping` (`0:a:0`) y con los defaults de los agents (`0:s:0`)
+- Tests: regresión completa en verde (103)
+- Issue: https://github.com/eskiconce/Mgo_Orquestador/issues/14
+- Fuera de alcance (deferido): `/api/analyze-source` (campos FPS/field_order), `services/builders.py` (interpretación `0:{N}` → `0:s:{N}`), migración BD de 3 canales con burn activo, agents respetando `subtitle_pid`
+
 ## v2.21.0 (2 Oct 2026) — Issue #13: Mejoras al front de canales
 
 - Nuevo: **validación de nombre de canal sin espacios** — JS al enviar (mensaje en español) + `save_channel` responde 400; placeholder corregido a `Ej: TVN_HD`

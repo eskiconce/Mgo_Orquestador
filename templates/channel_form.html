@@ -206,7 +206,7 @@
                                                 </div>
                                                 <div class="mt-2 ms-4 collapse" id="subPidContainer">
                                                     <label class="form-label small text-muted">PID del Subtítulo (Index)</label>
-                                                    <input type="number" name="subtitle_pid" id="subtitle_pid" class="form-control form-control-sm font-monospace" placeholder="Ej: 11" value="{{ channel.subtitle_pid if channel and channel.subtitle_pid else '' }}">
+                                                    <input type="number" name="subtitle_pid" id="subtitle_pid" class="form-control form-control-sm font-monospace" placeholder="Ej: 0" value="{{ channel.subtitle_pid if channel and channel.subtitle_pid else '' }}">
                                                 </div>
                                             </div>
                                         </div>
@@ -369,10 +369,10 @@
                 let subCount = data.streams.filter(s => s.codec_type === 'subtitle').length;
                 summary.innerHTML = `<span class="text-primary fw-bold">${videoCount} video</span> · <span class="text-success fw-bold">${audioCount} audio</span>${subCount > 0 ? ` · <span class="text-danger fw-bold">${subCount} subtitle</span>` : ''}`;
 
-                let subStream = data.streams.find(s => s.codec_name === 'dvb_subtitle' || s.codec_name === 'dvb_teletext' || s.codec_type === 'subtitle');
-                if (subStream) {
+                const subList = data.streams.filter(s => s.codec_type === 'subtitle' || s.codec_name === 'dvb_subtitle' || s.codec_name === 'dvb_teletext');
+                if (subList.length) {
                     const subInput = document.getElementById('subtitle_pid');
-                    if (subInput) { subInput.value = subStream.index; }
+                    if (subInput) { subInput.value = 0; }
                 }
 
                 let videoStream = data.streams.find(s => s.codec_type === 'video');
@@ -428,14 +428,14 @@
 
         if (videoStreams.length) {
             let html = `<div class="card mb-3 border-primary"><div class="card-header bg-primary text-white fw-bold py-2"><i class="fas fa-video me-2"></i>Video</div><div class="card-body p-2">`;
-            videoStreams.forEach(s => {
+            videoStreams.forEach((s, i) => {
                 const resol = s.width && s.height ? `${s.width}x${s.height}` : '?x?';
                 const interlaced = s.field_order && s.field_order !== 'progressive' && s.field_order !== 'unknown';
                 const fpsMatch = s.r_frame_rate ? s.r_frame_rate.split('/') : ['0','0'];
                 const fps = fpsMatch[1] != '0' ? (parseInt(fpsMatch[0])/parseInt(fpsMatch[1])).toFixed(2) : '?';
                 const pidHex = "0x" + parseInt(s.id).toString(16).toUpperCase();
                 html += `<div class="d-flex justify-content-between align-items-center p-1 border-bottom">
-                    <span><strong>Stream #${s.index}</strong> PID ${s.id} (${pidHex})</span>
+                    <span><strong>Stream #${i}</strong> PID ${s.id} (${pidHex})</span>
                     <span class="badge bg-primary fs-6">${resol}</span>
                 </div>
                 <div class="row small text-muted p-1">
@@ -460,7 +460,7 @@
                 html += `<div class="form-check border-bottom p-1">
                     <input class="form-check-input audio-select" type="checkbox" value="${i}" id="audio_${i}" ${checked}>
                     <label class="form-check-label w-100" for="audio_${i}">
-                        <span><strong>Stream #${s.index}</strong> PID ${s.id} (${pidHex})</span>
+                        <span><strong>Stream #${i}</strong> PID ${s.id} (${pidHex})</span>
                         <span class="badge bg-success ms-2">${lang}</span>
                         ${langName ? `<span class="small text-muted ms-1">${langName}</span>` : ''}
                         <span class="float-end small text-muted">${s.codec_name} ${sampleRate} ${channels}</span>
@@ -478,9 +478,9 @@
                 const lang = s.language && s.language !== 'und' ? s.language.toUpperCase() : 'UND';
                 const langName = s.language_name || '';
                 html += `<div class="form-check border-bottom p-1">
-                    <input class="form-check-input sub-select" type="radio" name="sub_radio" value="${s.index}" id="sub_${i}" ${i === 0 ? 'checked' : ''}>
+                    <input class="form-check-input sub-select" type="radio" name="sub_radio" value="${i}" id="sub_${i}" ${i === 0 ? 'checked' : ''}>
                     <label class="form-check-label w-100" for="sub_${i}">
-                        <span><strong>Stream #${s.index}</strong> PID ${s.id} (${pidHex})</span>
+                        <span><strong>Stream #${i}</strong> PID ${s.id} (${pidHex})</span>
                         <span class="badge bg-danger ms-2">${lang}</span>
                         ${langName ? `<span class="small text-muted ms-1">${langName}</span>` : ''}
                         <span class="float-end small text-muted">${s.codec_name}</span>
