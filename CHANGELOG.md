@@ -1,5 +1,15 @@
 # Changelog — Encoder Orchestrator
 
+## v2.21.0 (2 Oct 2026) — Issue #13: Mejoras al front de canales
+
+- Nuevo: **validación de nombre de canal sin espacios** — JS al enviar (mensaje en español) + `save_channel` responde 400; placeholder corregido a `Ej: TVN_HD`
+- Eliminado: **switch DRM del formulario de canales** — era UI muerta (`save_channel` nunca recibía `is_drm` y `Channel.is_drm` no se leía); DRM solo opera a nivel de proceso/packager en `process_form.html` (sin cambios)
+- Nuevo: **Program ID = Número Canal MGO** — `program_id = int(unique_id)` en todo guardado; textbox manual y botón "Fijar Mapeo" reemplazados por campo readonly sincronizado en vivo; el escaneo ya no sobrescribe `program_id` (el detectado solo es informativo en el modal); `unique_id` debe ser numérico (400 si no)
+- Modificado: **bitrate perfil 1 default `4500k`** (antes 6000k en alta) y el escaneo asigna `4500k` (antes 7000k/5000k/4000k según resolución detectada); campo editable (parámetro base); `bitrate_high_max` siempre emparejado a `bitrate_p1` (JS en el form + backend) para coherencia entre el encode de ffmpeg y el ancho de banda Shaka (`services/builders.py`)
+- Docs: `docs/rotacion-llaves-drm-15jul26.md` corregido (sección de formulario de canales)
+- Tests: 9 validaciones de `save_channel` + 2 de render del formulario (suite completa: 103 en verde)
+- Issue: https://github.com/eskiconce/Mgo_Orquestador/issues/13
+
 ## v2.20.0 (30 Sep 2026) — Issue #12: Anti-zombie + crash-loop sync + eventos CMS
 
 - Fix: **anti-zombie efímero** — un proceso RUNNING sin permiso con uptime < 30s ya no se adopta como `running`; se registra `ZOMBIE_UNSTABLE` y se marca `error` con `started_at=None` (corta el ciclo crash-loop: sin CMS offline, sin PROCESS_SYNCED, sin RECOVERY-RETRY). Adopción recién tras 30s continuos de RUNNING (ventana en memoria cuando el agente reporta `start=0`)

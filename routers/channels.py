@@ -62,22 +62,28 @@ def edit_channel_form(channel_id: int, request: Request, db: Session = Depends(g
 
 @router.post("/ui/channels/save")
 def save_channel(
-    channel_id: int = Form(None), channel_name: str = Form(...), unique_id: str = Form(...),
+    channel_id: int = Form(None), channel_name: str = Form(...), unique_id: str = Form(""),
     origin_multicast_ip: str = Form(...), origin_multicast_port: int = Form(...),
     origin2_multicast_ip: str = Form(""), origin2_multicast_port: int = Form(None),
-    input_protocol: str = Form("udp"), program_id: int = Form(0),
+    input_protocol: str = Form("udp"),
     probesize: str = Form("5M"), analyzeduration: str = Form("5M"), fifo_size: int = Form(1000000), buffer_size: int = Form(2000000),
     video_codec: str = Form("libx264"), audio_codec: str = Form("aac"),
     fps_p1: float = Form(30.0), fps_p2: float = Form(30.0), gop_p1: int = Form(60), gop_p2: int = Form(60),
     interlaced: bool = Form(False), burn_subtitles: bool = Form(False), subtitle_pid: int = Form(None),
     audio_mapping: str = Form(""), multicast_ip_out: str = Form(...),
-    port_1080p: int = Form(3140), resolution_p1: str = Form("1920x1080"), bitrate_p1: str = Form("6000k"), bitrate_high_max: str = Form("6000k"),
+    port_1080p: int = Form(3140), resolution_p1: str = Form("1920x1080"), bitrate_p1: str = Form("4500k"),
     port_480p: int = Form(3141), bitrate_p2: str = Form("2500k"), bitrate_low_max: str = Form("2500k"), port_audio: int = Form(3142),
     notes: str = Form(""), ruta: str = Form(""),
     db: Session = Depends(get_db), current_user: models.User = Depends(get_current_user)
 ):
     if current_user.role not in ("admin", "operator"):
         raise HTTPException(status_code=403, detail="Acceso denegado")
+    if any(ch.isspace() for ch in channel_name):
+        raise HTTPException(status_code=400, detail="El nombre del canal no puede contener espacios")
+    if not unique_id or not unique_id.isdigit():
+        raise HTTPException(status_code=400, detail="El Número Canal MGO debe ser numérico")
+    program_id = int(unique_id)
+    bitrate_high_max = bitrate_p1
     try:
         count_origins = 2 if origin2_multicast_ip and origin2_multicast_port else 1
         if channel_id:

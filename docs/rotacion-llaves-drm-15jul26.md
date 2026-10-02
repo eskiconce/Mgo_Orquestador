@@ -78,8 +78,7 @@ is_drm = Column(Boolean, default=False)
 - Confirmacion previa antes de ejecutar (alert nativo del browser)
 
 ### Formulario de Canales (channel_form.html)
-- Nuevo toggle **DRM** en la seccion de identificacion del servicio
-- Al guardar el canal, se persiste el campo `is_drm` en la DB
+- ~~Nuevo toggle **DRM** en la seccion de identificacion del servicio~~ — **eliminado** (issue #13, v2.21.0): DRM solo aplica a procesos/packagers. El toggle nunca persistía (`save_channel` no recibía `is_drm`). El DRM operativo se configura en el formulario de procesos (`process_form.html`).
 
 ## Flujos de Uso
 

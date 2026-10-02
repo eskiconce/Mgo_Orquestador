@@ -29,28 +29,19 @@
                             <div class="row g-3">
                                 <div class="col-md-5">
                                     <label class="form-label fw-bold small text-muted">Nombre del Canal</label>
-                                    <input type="text" name="channel_name" class="form-control form-control-lg" placeholder="Ej: TVN HD" value="{{ channel.channel_name if channel else '' }}" required>
+                                    <input type="text" name="channel_name" class="form-control form-control-lg" placeholder="Ej: TVN_HD" pattern="\S+" title="No puede contener espacios" value="{{ channel.channel_name if channel else '' }}" required>
                                 </div>
                                 <div class="col-md-3">
                                     <label class="form-label fw-bold small text-muted">Número Canal MGO</label>
-                                    <input type="text" name="unique_id" class="form-control form-control-lg text-uppercase font-monospace" placeholder="100" value="{{ channel.unique_id if channel else '' }}" required>
+                                    <input type="text" name="unique_id" id="unique_id" class="form-control form-control-lg text-uppercase font-monospace" placeholder="100" value="{{ channel.unique_id if channel else '' }}" required>
                                 </div>
-                                <div class="col-md-2">
+                                <div class="col-md-4">
                                     <label class="form-label fw-bold small text-muted">Ruta del Canal (URL)</label>
                                     <div class="input-group input-group-lg">
                                         <span class="input-group-text bg-white text-muted">/live/</span>
                                         <input type="text" name="ruta" class="form-control font-monospace" placeholder="tvn_hd" value="{{ channel.ruta if channel else '' }}" required>
                                     </div>
                                     <div class="form-text small">Sin espacios. Ej: <b>tvn_hd</b> (.mpd)</div>
-                                </div>
-                                <div class="col-md-2 d-flex align-items-end">
-                                    <div class="form-check form-switch p-3 bg-light border rounded w-100">
-                                        <input class="form-check-input ms-1" type="checkbox" name="is_drm" value="true" id="chIsDrm" {% if channel and channel.is_drm %}checked{% endif %}>
-                                        <label class="form-check-label ms-2 fw-bold" style="color: #6f42c1;" for="chIsDrm">
-                                            <i class="fas fa-lock me-1"></i> DRM
-                                        </label>
-                                        <div class="form-text small ms-1 mt-1">Protección Widevine</div>
-                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -144,9 +135,9 @@
                                                             <label class="form-label small fw-bold">Program ID</label>
                                                             <div class="input-group input-group-sm">
                                                                 <span class="input-group-text"><i class="fas fa-list-ol"></i></span>
-                                                                <input type="number" name="program_id" id="program_id" class="form-control font-monospace fw-bold" value="{{ channel.program_id if channel else '1' }}">
-                                                                <button class="btn btn-outline-secondary" type="button" onclick="useDetectedProgram()">Fijar Mapeo</button>
+                                                                <input type="text" id="program_id_display" class="form-control font-monospace fw-bold bg-light" value="{{ channel.unique_id if channel else '' }}" readonly>
                                                             </div>
+                                                            <div class="form-text small">Se deriva del Número Canal MGO (no editable)</div>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -273,8 +264,8 @@
                                             <input type="number" name="port_1080p" class="form-control font-monospace fw-bold" value="{{ channel.port_1080p if channel else '3100' }}">
                                         </div>
                                         <div class="row g-1">
-                                            <div class="col-12"><input type="text" name="bitrate_p1" class="form-control form-control-sm" placeholder="Bitrate" value="{{ channel.bitrate_p1 if channel else '6000k' }}"></div>
-                                            <input type="hidden" name="bitrate_high_max" value="{{ channel.bitrate_high_max if channel else '6000k' }}">
+                                            <div class="col-12"><input type="text" name="bitrate_p1" class="form-control form-control-sm" placeholder="Bitrate" value="{{ channel.bitrate_p1 if channel else '4500k' }}"></div>
+                                            <input type="hidden" name="bitrate_high_max" value="{{ channel.bitrate_p1 if channel else '4500k' }}">
                                         </div>
                                     </div>
                                 </div>
@@ -321,7 +312,6 @@
 
 <script>
     let _scanData = null;
-    let _detectedProgramId = null;
 
     function toggleSubPID() {
         const check = document.getElementById('checkBurnSubs');
@@ -374,11 +364,6 @@
                 const progLabel = data.programs.length > 0 ? `ProgID: ${data.programs[0].program_id}` : "SPTS";
                 document.getElementById('streamCount').innerText = data.streams.length + " streams / " + progLabel;
 
-                if (data.programs.length > 0) {
-                    _detectedProgramId = data.programs[0].program_id;
-                    document.getElementById('program_id').value = parseInt(data.programs[0].program_id);
-                }
-
                 let videoCount = data.streams.filter(s => s.codec_type === 'video').length;
                 let audioCount = data.streams.filter(s => s.codec_type === 'audio').length;
                 let subCount = data.streams.filter(s => s.codec_type === 'subtitle').length;
@@ -398,16 +383,11 @@
 
                     if (videoStream.width == 1920 && videoStream.height == 1080) {
                         if (resolSelect) resolSelect.value = "1920x1080";
-                        if (bitrateAvg) bitrateAvg.value = "7000k";
-                        if (bitrateMax) bitrateMax.value = "7000k";
                     } else if (videoStream.width == 1280 && videoStream.height == 720) {
                         if (resolSelect) resolSelect.value = "1280x720";
-                        if (bitrateAvg) bitrateAvg.value = "5000k";
-                        if (bitrateMax) bitrateMax.value = "5000k";
-                    } else {
-                        if (bitrateAvg) bitrateAvg.value = "4000k";
-                        if (bitrateMax) bitrateMax.value = "4000k";
                     }
+                    if (bitrateAvg) bitrateAvg.value = "4500k";
+                    if (bitrateMax) bitrateMax.value = "4500k";
                 }
 
                 let audioCommandStr = "";
@@ -561,10 +541,38 @@
         if (modal) modal.hide();
     }
 
-    function useDetectedProgram() {
-        if (_detectedProgramId) { document.getElementById('program_id').value = parseInt(_detectedProgramId); } 
-        else { alert("No se ha detectado un Program ID aún."); }
-    }
+    // Validación de nombre sin espacios + sincronías (Program ID y high_max)
+    document.addEventListener("DOMContentLoaded", () => {
+        const form = document.getElementById("channelForm");
+        const nameInput = form ? form.querySelector('input[name="channel_name"]') : null;
+        const uidInput = document.getElementById("unique_id");
+        const pidDisplay = document.getElementById("program_id_display");
+        const bitrateP1 = document.querySelector('input[name="bitrate_p1"]');
+        const bitrateHighMax = document.querySelector('input[name="bitrate_high_max"]');
+
+        if (uidInput && pidDisplay) {
+            pidDisplay.value = uidInput.value;
+            uidInput.addEventListener("input", () => { pidDisplay.value = uidInput.value; });
+        }
+
+        if (bitrateP1 && bitrateHighMax) {
+            bitrateP1.addEventListener("input", () => { bitrateHighMax.value = bitrateP1.value; });
+        }
+
+        if (form && nameInput) {
+            nameInput.addEventListener("input", () => nameInput.setCustomValidity(""));
+            form.addEventListener("submit", (e) => {
+                if (bitrateP1 && bitrateHighMax) bitrateHighMax.value = bitrateP1.value;
+                if (/\s/.test(nameInput.value)) {
+                    nameInput.setCustomValidity("El nombre del canal no puede contener espacios");
+                    e.preventDefault();
+                    nameInput.reportValidity();
+                    return;
+                }
+                nameInput.setCustomValidity("");
+            });
+        }
+    });
 
     // Lógica Respaldo
     document.addEventListener("DOMContentLoaded", () => {
