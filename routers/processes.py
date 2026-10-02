@@ -246,7 +246,7 @@ def move_job(job_id: int = Form(...), new_node_id: int = Form(...), db: Session 
     job.node_id, job.node = new_node.id, new_node
     if new_node.tipo == 'Encoder' and job.command and new_node.ip_multicast:
         new_ip = new_node.ip_multicast
-        cmd = re.sub(r'LOCADDRESS = "[^"]*"', f'LOCADDRESS = "{new_ip}"', job.command)
+        cmd = re.sub(r'LOCADDRESS(\s*)=(\s*)"[^"]*"', rf'LOCADDRESS\1=\2"{new_ip}"', job.command)
         cmd = re.sub(r'localaddr=\d{1,3}(?:\.\d{1,3}){3}', f'localaddr={new_ip}', cmd)
         if cmd != job.command:
             job.command = cmd

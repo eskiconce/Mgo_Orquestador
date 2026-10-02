@@ -4,11 +4,19 @@
 
 ### Requirement: move_job sincroniza la IP multicast del script al mover un Encoder
 
-`POST /orchestrator/move-job` SHALL actualizar `job.command` con la `ip_multicast` del nodo destino cuando el destino es un Encoder, reemplazando por patrón `LOCADDRESS = "..."` y `localaddr=<IP literal>`, preservando el resto del contenido del script (ediciones manuales incluidas).
+`POST /orchestrator/move-job` SHALL actualizar `job.command` con la `ip_multicast` del nodo destino cuando el destino es un Encoder, reemplazando por patrón `LOCADDRESS<espacios>="<IP>"` (cualquier variante de formato: bash `LOCADDRESS="ip"` sin espacios, Python `LOCADDRESS = "ip"` o `LOCADDRESS  = "ip"` con espaciado alineado, preservando el espaciado original) y `localaddr=<IP literal>`, preservando el resto del contenido del script (ediciones manuales incluidas).
 
 #### Scenario: move de encoder con script Linux/CPU
 - WHEN se mueve un job Encoder con `LOCADDRESS = "10.0.0.5"` a un nodo con `ip_multicast = "10.0.0.9"`
 - THEN `job.command` contiene `LOCADDRESS = "10.0.0.9"` y el resto del script es idéntico
+
+#### Scenario: move de encoder con script formato bash
+- WHEN se mueve un job Encoder con `LOCADDRESS="10.0.0.5"` (sin espacios, `#!/bin/bash`)
+- THEN `job.command` contiene `LOCADDRESS="10.0.0.9"` sin introducir espacios alrededor de `=` (rompería la sintaxis bash) y `localaddr=$LOCADDRESS` queda intacto
+
+#### Scenario: move de encoder con espaciado múltiple
+- WHEN se mueve un job Encoder con `LOCADDRESS  = "10.0.0.5"` (asignaciones alineadas)
+- THEN `job.command` contiene `LOCADDRESS  = "10.0.0.9"` con el mismo espaciado original
 
 #### Scenario: move de encoder con script Mac/GPU
 - WHEN se mueve un job Encoder cuyo script contiene 3 ocurrencias de `?localaddr=10.0.0.5&`

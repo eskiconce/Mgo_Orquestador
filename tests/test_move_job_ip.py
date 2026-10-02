@@ -66,6 +66,22 @@ PACKAGER_CMD = (
     'exec packager "in=udp://239.1.1.1:5000?interface=$INTERFACE&reuse=1"'
 )
 
+BASH_CMD = (
+    '#!/bin/bash\n'
+    'ORIGEN_IP="226.0.0.123"\n'
+    'LOCADDRESS="10.0.0.5"\n'
+    'DEST_IP="238.0.0.131"\n'
+    'ORIGEN_URL="udp://$ORIGEN_IP:1123?localaddr=$LOCADDRESS&fifo_size=2000000"\n'
+    'exec ffmpeg -i "$ORIGEN_URL" -f mpegts "$DEST_P1"'
+)
+
+PY_SPACED_CMD = (
+    'import subprocess\n'
+    'LOCADDRESS  = "10.0.0.5"\n'
+    'DEST_IP     = "238.0.0.12"\n'
+    'url = f"udp://{ORIGEN_IP}:{ORIGEN_PORT}?localaddr={LOCADDRESS}&fifo_size=1000000"'
+)
+
 
 class TestMoveEncoderLinux:
     def test_parchea_locaddress_y_preserva_referencia(self, admin_client, db_session, no_agent):
@@ -95,6 +111,33 @@ class TestMoveEncoderLinux:
         decompressed = zlib.decompress(base64.b64decode(job.command_compress)).decode("utf-8")
         assert 'LOCADDRESS = "10.0.0.9"' in decompressed
         assert "10.0.0.5" not in decompressed
+
+    def test_formato_bash_sin_espacios(self, admin_client, db_session, no_agent):
+        src = _node(db_session, "enc_s1", "Encoder", "10.0.0.5")
+        dst = _node(db_session, "enc_s2", "Encoder", "10.0.0.9")
+        ch = _channel(db_session, "CanalBash")
+        job = _job(db_session, ch, src, BASH_CMD)
+
+        _move(admin_client, job, dst)
+        db_session.refresh(job)
+
+        assert 'LOCADDRESS="10.0.0.9"' in job.command  # sin espacios, estilo bash
+        assert "LOCADDRESS = " not in job.command  # no introduce espacios (rompería bash)
+        assert "localaddr=$LOCADDRESS" in job.command  # referencia intacta
+        assert "10.0.0.5" not in job.command
+
+    def test_python_con_espaciado_multiple(self, admin_client, db_session, no_agent):
+        src = _node(db_session, "enc_p1", "Encoder", "10.0.0.5")
+        dst = _node(db_session, "enc_p2", "Encoder", "10.0.0.9")
+        ch = _channel(db_session, "CanalSpaced")
+        job = _job(db_session, ch, src, PY_SPACED_CMD)
+
+        _move(admin_client, job, dst)
+        db_session.refresh(job)
+
+        assert 'LOCADDRESS  = "10.0.0.9"' in job.command  # N espacios preservados
+        assert "localaddr={LOCADDRESS}" in job.command
+        assert "10.0.0.5" not in job.command
 
 
 class TestMoveEncoderMac:
