@@ -244,6 +244,13 @@ def move_job(job_id: int = Form(...), new_node_id: int = Form(...), db: Session 
     except Exception:
         pass
     job.node_id, job.node = new_node.id, new_node
+    if new_node.tipo == 'Encoder' and job.command and new_node.ip_multicast:
+        new_ip = new_node.ip_multicast
+        cmd = re.sub(r'LOCADDRESS = "[^"]*"', f'LOCADDRESS = "{new_ip}"', job.command)
+        cmd = re.sub(r'localaddr=\d{1,3}(?:\.\d{1,3}){3}', f'localaddr={new_ip}', cmd)
+        if cmd != job.command:
+            job.command = cmd
+            logger.info(f"Move job {job.id}: IP multicast del script actualizada a {new_ip} (nodo {new_node.hostname})")
     db.commit()
     if job.node.tipo == 'Packager':
         sync_haproxy_map(db)

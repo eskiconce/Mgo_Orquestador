@@ -1,5 +1,13 @@
 # Changelog — Encoder Orchestrator
 
+## v2.22.1 (2 Oct 2026) — Issue #15: Mover Nodo de Encoder sincroniza IP multicast del script
+
+- Fix: **`move_job` actualiza la IP multicast en `job.command` al mover un Encoder** — antes solo reasignaba `job.node_id` y el script conservaba el `LOCADDRESS`/`localaddr` del nodo origen (al iniciar, ffmpeg bindeaba la interfaz equivocada)
+- Parcheo quirúrgico por patrón (`LOCADDRESS = "..."` para Linux/CPU y `localaddr=<IP literal>` para Mac/GPU ×3 URLs) que **preserva las ediciones manuales** del script y la referencia `localaddr={LOCADDRESS}`; defensivo con `command` vacío o `ip_multicast` None
+- Tests: 8 nuevos (`tests/test_move_job_ip.py`) — suite completa: 111 en verde
+- Fuera de alcance (deferido): mover Packager (`INTERFACE=`), regeneración completa, validación en `start-job`
+- Issue: https://github.com/eskiconce/Mgo_Orquestador/issues/15
+
 ## v2.22.0 (2 Oct 2026) — Issue #14: Numeración de streams por tipo + subtítulo PID relativo
 
 - Modificado: **modal de escaneo numera `Stream #` por tipo desde #0** — video, audio y subtítulos cada grupo inicia en #0 (antes índice global ffprobe: audio mostraba #1 mientras enviaba `0:a:0`); el PID MPEG real se conserva informativo junto al número
